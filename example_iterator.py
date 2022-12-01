@@ -3,11 +3,11 @@ import pickle
 
 
 if __name__ == '__main__':
-    filename = "C:/repos/satellite-images-nso-datascience/models/randomforest_classifier_coepelduynen_contrast_annotations_grid_search_all_data_2019_2022_small.sav"
+    filename = "PATH/TO/MODEL/MODEL.sav"
     loaded_model = pickle.load(open(filename, 'rb'))
 
-    tif_file = "E:/data/coepelduynen/20210709_103835_SV1-01_SV_RD_11bit_RGBI_50cm_KatwijkAanZee_natura2000_coepelduynen_cropped_ndvi_height.tif"
-    output_location = "E:/output/test.shp"
+    tif_file = "PATH/TO/TIF/FILE/FILE.tif"
+    output_location = "PATH/TO/OUTPUT/FILE.shp"
 
 
     nso_tif_kernel_iterator_generator = tif_kernel_iterator.nso_tif_kernel_iterator_generator(tif_file)
