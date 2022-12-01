@@ -29,16 +29,6 @@ Download the wheels according to your system settings. For instance, wheel raste
 Or else check out this stack overflow post:
 https://gis.stackexchange.com/questions/2276/installing-gdal-with-python-on-windows 
 
-In addition to the above wheels, the following packages are also needed:
-- geopandas
-- matplotlib
-- SQLAlchemy
-- tqdm
-- yellowbrick
-
-Use this [requirements](requirements.txt) file for installation.
-
-
 
 # (Image Processing) Kernels.
 The main functionality of this repository is to extract image kernels and the multiprocessing for loop for looping over all the pixels and/or image kernels in a given satellite .tif file to make predictions on them.
@@ -81,6 +71,9 @@ if __name__ == '__main__':
     # Iterates and predicts all the pixels in a .tif file with a particular model and stores the dissolved results in the out_path file in a multiprocessing way. So this has to be run from a terminal.  
     tif_kernel_generator.predict_all_output(loaded_model, out_path , parts = 3)
 ```
+# Installation.
+
+Install the .whl file in the /dist folder.
 
 # Author
 Michael de Winter
