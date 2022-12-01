@@ -1,3 +1,17 @@
+Metadata-Version: 2.1
+Name: tif-model-iterator
+Version: 1.0.0
+Summary: NSO Satellite Model implementer
+Home-page: https://github.com/Provincie-Zuid-Holland/satellite_images_nso_tif_model_iterator
+Author: Michael de Winter
+Author-email: m.r.dewinter88@live.nl
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.6
+Description-Content-Type: text/markdown
+License-File: LICENSE
+
 # Introduction 
 
 This repository contains a .tif file (computer vision) model executer which means that it iterates and implements a (computer vision) model on every pixel and/or extracted image kernel in a .tif file.
@@ -83,7 +97,7 @@ tif_kernel_generator.predict_all_output(euclidean_distance_model, out_path , par
 
 We have tried different models all of which are still stored in nso_ds_classes /nso_ds_models.py file.
 
-After a certain amount of testing we have decided that the (scaled) contrast model is the final model we will use. This is due to it's capability to adjust for variances in the atmosphere which causes different color interferences in the satellite images. And it’s better computing performance versus conventional best performance models like deep learning models, which was a couple of minutes in contrast to days.
+After a certain amount of testing we have decided that the (scaled) contrast model is the final model we will use. This is due to it's capability to adjust for variances in the atmosphere which causes different color interferences in the satellite images. And itâ€™s better computing performance versus conventional best performance models like deep learning models, which was a couple of minutes in contrast to days.
 
 ## (Main) Scaled Contrast Model
 ### Predetermined contrast classes
@@ -106,7 +120,7 @@ For more about how min max scalers, read the sklearn page [Here](https://scikit-
 ### Input filtering
 
 For the input we discovered that the atmosphere had a collinearity effect on the three red, green and blue values. As such we only pick the blue band in order to reduce the relative color weight in the prediction compared to NDVI and height data.
-A other advantage of using the color blue is that it’s the best color to  detect sand with. Detecting sand is particularly interesting for ecologists. 
+A other advantage of using the color blue is that itâ€™s the best color to  detect sand with. Detecting sand is particularly interesting for ecologists. 
 
 The following illustration exemplifies the eventual and final input we have for the contrast model:
 
