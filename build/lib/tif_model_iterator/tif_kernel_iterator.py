@@ -25,7 +25,7 @@ import random
 
     Author: Michael de Winter, Jeroen Esseveld
 """
-class nso_tif_kernel_iterator_generator:
+class tif_kernel_iterator_generator:
 
     """
         This class set up a .tif image in order to easily extracts kernel from it.
@@ -82,7 +82,7 @@ class nso_tif_kernel_iterator_generator:
         """
         Creates a fading kernel based on the shape of the other kernels and different parameters.
 
-        A fading kernel uses weights to give other pixel than the center pixel less weight in the prediction.
+        A fading kernel uses weights to give other pixel than the center pixel less 989/":weight in the prediction.
 
         @param fade_power: the power of the fade kernel.
         @param bands: the number bands that has to be faded.
@@ -304,7 +304,7 @@ class nso_tif_kernel_iterator_generator:
                         return [0,0,0]
         
  
-    def predict_all_output(self, amodel, output_location, aggregate_output = True, parts = 10, begin_part = 0, bands = [1,2,3,4,5,6], fade = False, normalize_scaler = False, multiprocessing = True ):
+    def predict_all_output(self, amodel, output_location, aggregate_output = True, parts = 10, begin_part = 0, bands = [1,2,3,4,5,6], fade = False, normalize_scaler = False, multiprocessing = True):
         """
             A multiprocessing iterator which predicts all pixel in a raster .tif, based on there kernels. 
             Multiprocessing on default is true  so this has to be run from a terminal.
@@ -312,6 +312,7 @@ class nso_tif_kernel_iterator_generator:
             For specifically large .tif files, this file has to be divided into multiple parts.
             So it can fit into memory, parameters are here which can control that.
 
+            TODO: Make logs for runs.
 
             @param amodel: A prediction model with has to have a predict function and uses kernels as input.
             @param output_location: Location where to writes the results to in .shp file.

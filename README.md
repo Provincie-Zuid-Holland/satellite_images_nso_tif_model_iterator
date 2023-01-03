@@ -2,14 +2,14 @@
 
 This repository contains a .tif file (computer vision) model executer which means that it iterates and implements a (computer vision) model on every pixel and/or extracted image kernel in a .tif file.
 As long as a model has a .predict function in python any model can be used in this executer from simple models to deep learning models.
-
-For the models that use image processing kernels, code functionality is written here which should makes kernel extraction from .tif files easy to do. 
-
 For more on what image processing kernels are: [Here](https://en.wikipedia.org/wiki/Kernel_(image_processing))
 
-The iterative loop that loops over every pixel and/or extracted image kernel in a .tif, because of the long processing time, can be done in a multi processing loop.
+The iterative loop that loops over every pixel and/or extracted image kernel in a .tif, because of the long processing time, can be done in a multi processing loop, which in default this on.
+
 Which means that it can't be run in a (jupyter) notebook interface, it has to be run from a terminal and it freezes your computer.
 
+Also a databricks pyspark implementation is writing here which is based on this model iterator only written to take advantage of apache spark.
+Found in the ./pspark folder.
 
 # Dependencies.
 If you are a Windows user you have to install the dependencies via wheels. The wheels for the following dependencies should be downloaded from https://www.lfd.uci.edu/~gohlke/pythonlibs/:
@@ -61,7 +61,18 @@ if __name__ == '__main__':
     loaded_model = pickle.load(open(filename, 'rb')
 
     # Setup up a kernel generator for this .tif file.
-    tif_kernel_generator = tif_kernel_iterator.nso_tif_kernel_iterator_generator(path_to_tif_file, x_size_kernel, y_size_kernel)
+
+    # The parameter are:
+    # @param amodel: A prediction model with has to have a predict function and uses kernels as input.
+    # @param output_location: Location where to writes the results to in .shp file.
+    # @param aggregate_output: 50 cm is the default resolution but we can aggregate to 2m.
+    # @param parts: break the .tif file in multiple parts, this has to be done since most extracted pixels or kernel don't fit # in memory.
+    # @param begin_part: The part to begin with in order to skip certain parts.
+    # @param bands: Which bands of the .tif file to use from the .tif file by default this will be all the bands.
+    # @param fade: Whether to use fading kernels or not, fading is a term I coined to denouced for giving the centrale pixel # the most weight in the model while giving less weight the further the other pixels are in the model.
+    # @param normalize_scaler: Whether to use a normalize/scaler on all the kernels or not, the input here so be a normalize/scaler function. You have to submit the normalizer/scaler as a argument here if you want to use a scaler, this has to be # a custom  class like nso_ds_normalize_scaler.
+    # @param multiprocessing: Whether or not to use multiprocessing for loop for iterating across all the pixels.
+    tif_kernel_generator = tif_kernel_iterator.tif_kernel_iterator_generator(path_to_tif_file, x_size_kernel, y_size_kernel)
 
     kernel = tif_kernel_generator.get_kernel_for_x_y(x_row,y_row )
     kernel.shape

@@ -25,7 +25,7 @@ import random
 
     Author: Michael de Winter, Jeroen Esseveld
 """
-class nso_tif_kernel_iterator_generator:
+class tif_kernel_iterator_generator:
 
     """
         This class set up a .tif image in order to easily extracts kernel from it.
@@ -317,10 +317,10 @@ class nso_tif_kernel_iterator_generator:
             @param amodel: A prediction model with has to have a predict function and uses kernels as input.
             @param output_location: Location where to writes the results to in .shp file.
             @param aggregate_output: 50 cm is the default resolution but we can aggregate to 2m.
-            @param parts: break the .tif file in multiple parts, this is needed because some .tif files can contain 3 billion pixels which won't fit in one pass in memory thus we divide a .tif file in multiple parts.
+            @param parts: break the .tif file in multiple parts, this has to be done since most extracted pixels or kernel don't fit in memory.
             @param begin_part: The part to begin with in order to skip certain parts.
             @param bands: Which bands of the .tif file to use from the .tif file by default this will be all the bands.
-            @param fade: Whether to use fading kernels or not.
+            @param fade: Whether to use fading kernels or not, fading is a term I coined to denouced for giving the centrale pixel the most weight in the model while giving less weight the further the other pixels are in the model.
             @param normalize_scaler: Whether to use a normalize/scaler on all the kernels or not, the input here so be a normalize/scaler function. You have to submit the normalizer/scaler as a argument here if you want to use a scaler, this has to be a custom  class like nso_ds_normalize_scaler.
             @param multiprocessing: Whether or not to use multiprocessing for loop for iterating across all the pixels.
         """
