@@ -15,4 +15,4 @@ if __name__ == '__main__':
     nso_tif_kernel_iterator_generator = tif_kernel_iterator.tif_kernel_iterator_generator(tif_file)
 
 
-    nso_tif_kernel_iterator_generator.predict_all_output(loaded_model, output_location, parts=3, multiprocessing = True )
+    nso_tif_kernel_iterator_generator.predict_all_output(loaded_model, output_location, parts=3, multiprocessing = True, normalize_scaler="PATH/TO/SCALER" )
