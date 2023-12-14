@@ -25,7 +25,7 @@ if __name__ == '__main__':
     nso_tif_kernel_iterator_generator.predict_all_output(
         loaded_model,
         output_file_name_generator=output_file_name_generator,
-        parts=1000,
+        parts=20,
         multiprocessing=True,
         normalize_scaler=scaler
     )
