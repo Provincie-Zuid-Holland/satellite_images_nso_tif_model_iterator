@@ -4,7 +4,8 @@ import rasterio
 from rasterio.plot import show
 from matplotlib import pyplot as plt
 import pandas as pd
-import src.tif_model_iterator.__nso_ds_output as __nso_ds_output  
+from src.tif_model_iterator.__nso_ds_output import dissolve_gpd_output
+from src.filenames.file_name_generator import OutputFileNameGenerator
 from tqdm import tqdm
 import os
 import glob
@@ -292,7 +293,7 @@ class tif_kernel_iterator_generator:
 
             # TODO: Make the bands selected able
             coords = input_x_y[-1]
-            label = self.model.predict([input_x_y[:-1]])
+            label = self.model.predict([input_x_y[:-1]])[0]
             return [coords[0], coords[1], label]
 
         except ValueError as e:                  
@@ -304,7 +305,7 @@ class tif_kernel_iterator_generator:
                         return [0,0,0]
         
  
-    def predict_all_output(self, amodel, output_location, aggregate_output = True, parts = 10, begin_part = 0, bands = [1,2,3,4,5,6], fade = False, normalize_scaler = False, multiprocessing = True):
+    def predict_all_output(self, amodel, output_file_name_generator: OutputFileNameGenerator, aggregate_output = True, parts = 10, begin_part = 0, bands = [1,2,3,4,5,6], fade = False, normalize_scaler = False, multiprocessing = True):
         """
             A multiprocessing iterator which predicts all pixel in a raster .tif, based on there kernels. 
             Multiprocessing on default is true  so this has to be run from a terminal.
@@ -315,7 +316,7 @@ class tif_kernel_iterator_generator:
             TODO: Make logs for runs.
 
             @param amodel: A prediction model with has to have a predict function and uses kernels as input.
-            @param output_location: Location where to writes the results to in .shp file.
+            @param output_file_name_generator: Generates desired filenames for output files
             @param aggregate_output: 50 cm is the default resolution but we can aggregate to 2m.
             @param parts: break the .tif file in multiple parts, this has to be done since most extracted pixels or kernel don't fit in memory.
             @param begin_part: The part to begin with in order to skip certain parts.
@@ -324,8 +325,6 @@ class tif_kernel_iterator_generator:
             @param normalize_scaler: Whether to use a normalize/scaler on all the kernels or not, the input here so be a normalize/scaler function. You have to submit the normalizer/scaler as a argument here if you want to use a scaler, this has to be a custom  class like nso_ds_normalize_scaler.
             @param multiprocessing: Whether or not to use multiprocessing for loop for iterating across all the pixels.
         """
-       
-
         # Set some variables for breaking the .tif in different part parts in order to save memory.
         total_height = self.get_height() - self.x_size
 
@@ -352,7 +351,7 @@ class tif_kernel_iterator_generator:
         self.bands = bands
 
         # Divide the satellite images into multiple parts and loop through the parts, using parts reduces the amount of RAM required to run this process.
-        for x_step in tqdm(range(begin_part,parts)):
+        for x_step in tqdm(range(begin_part, parts)):
             print("-------")
             print("Part: "+str(x_step+1)+" of "+str(parts))
             # Calculate the number of permutations for this part.
@@ -437,8 +436,9 @@ class tif_kernel_iterator_generator:
             seg_df = gpd.GeoDataFrame(seg_df, geometry=seg_df.geometry)
             seg_df = seg_df.set_crs(epsg = 28992)
             print("Geometry made in: "+str(timer()-start)+" second(s)")
-            __nso_ds_output.dissolve_gpd_output(seg_df, output_location.replace(".","_part_"+str(x_step)+"."))
-            print(output_location.replace(".","_part_"+str(x_step)+"."))
+            output_file_name = output_file_name_generator.generate_part_output_path(x_step)
+            dissolve_gpd_output(seg_df, output_file_name)
+            print(output_file_name)
 
             print("Writing finished in: "+str(timer()-start)+" second(s)")
             print(seg_df.columns)
@@ -452,25 +452,24 @@ class tif_kernel_iterator_generator:
         all_part = 0
         first_check = 0
 
-        for file in glob.glob(output_location.replace(".","_part_*.")):
-                        print(file)
-                        if first_check == 0:
-                            all_part = gpd.read_file(file)
-                            first_check = 1
-                        else:
-                            print("Append")
-                            all_part = all_part.append(gpd.read_file(file))
-                            
+        for file in glob.glob(output_file_name_generator.glob_wild_card_for_part_extension_only()):
+            if first_check == 0:
+                all_part = gpd.read_file(file)
+                first_check = 1
+            else:
+                print("Append")
+                all_part = pd.concat([all_part, gpd.read_file(file)])
+
         try:
             if str(type(amodel)) != "<class 'nso_ds_classes.nso_ds_models.deep_learning_model'>" or str(type(amodel)) == "<class 'nso_ds_classes.nso_ds_models.waterleiding_ahn_ndvi_model'>":
                 all_part['label'] = all_part.apply(lambda x: amodel.get_class_label(x['label']), axis=1)
         except Exception as e:
             print(e)
-            
-        all_part.dissolve(by='label').to_file(output_location)
-        
-        for file in glob.glob(output_location.replace(".","_part_*.").split(".")[0]):
-            os.remove(file)
+        final_output_path = output_file_name_generator.generate_final_output_path()
+        all_part.dissolve(by='label').to_file(final_output_path)
+
+        for file in glob.glob(output_file_name_generator.glob_wild_card_for_all_part_files()):
+            os.remove(os.path.join(output_file_name_generator.output_path, file))
 
 
 
@@ -610,12 +609,7 @@ class tif_kernel_iterator_generator:
                 p = Pool()
                 permutations = p.map(self.predict_keras_multi_processing,permutations)
                 p.terminate()
-           
-            
-         
             else:
-
-              
                 permutations = np.array([self.get_kernel_multi_processing(permutation) for permutation in permutations],dtype='object')
                 print(permutations)
                 #permutations = permutations[permutations != None]
@@ -690,7 +684,7 @@ class tif_kernel_iterator_generator:
                     seg_df = seg_df.set_crs(epsg = 28992)
                     print("Geometry made in: "+str(timer()-start)+" second(s)")
                     try:
-                        __nso_ds_output.dissolve_gpd_output(seg_df, output_location.replace(".","_part_"+str(x_step)+"."))
+                        dissolve_gpd_output(seg_df, output_location.replace(".","_part_"+str(x_step)+"."))
                         print(output_location.replace(".","_part_"+str(x_step)+"."))
                     except:
                         print("Warning nothing has been written")
