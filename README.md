@@ -18,7 +18,7 @@ If you are a Windows user you have to install the dependencies via wheels. The w
 - [![Fiona>=1.8.13 ](https://img.shields.io/badge/Fiona-%3E%3D1.8.13-green)](https://pypi.org/project/Fiona/)
 - [![rasterio>=1.1.3 ](https://img.shields.io/badge/rasterio-%3E%3D1.1.3-blue)](https://rasterio.readthedocs.io/en/latest/)
 - [![Shapely>=1.7.0 ](https://img.shields.io/badge/Shapely-%3E%3D1.7.0-green)](https://shapely.readthedocs.io/en/stable/manual.html)
-- [![scikit-learn==1.0.2](https://img.shields.io/badge/scikit--learn-%3D%3D1.0.2-blue)](https://scikit-learn.org/stable/)
+- [![scikit-learn==1.1.3](https://img.shields.io/badge/scikit--learn-%3D%3D1.0.2-blue)](https://scikit-learn.org/stable/)
 - [![NumPy==1.22.4](https://img.shields.io/badge/NumPy-%3D%3D1.22.4-green)](https://numpy.org/)
 - [![geopandas>=0.9.0](https://img.shields.io/badge/geopandas-%3E%3D0.9.0-blue)](https://geopandas.org/en/stable/)
 
@@ -29,6 +29,11 @@ Download the wheels according to your system settings. For instance, wheel raste
 Or else check out this stack overflow post:
 https://gis.stackexchange.com/questions/2276/installing-gdal-with-python-on-windows 
 
+In addition to the above wheels, the following packages are also needed:
+- matplotlib
+- tqdm
+
+Then run 'pip install .' in the satellite-images-nso-datascience repository, to obtain the nso_ds_classes package.
 
 # (Image Processing) Kernels.
 The main functionality of this repository is to extract image kernels and the multiprocessing for loop for looping over all the pixels and/or image kernels in a given satellite .tif file to make predictions on them.

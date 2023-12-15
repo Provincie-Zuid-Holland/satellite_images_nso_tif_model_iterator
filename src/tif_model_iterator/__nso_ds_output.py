@@ -1,5 +1,6 @@
 import json
 import geopandas as gpd
+import pandas as pd
 
 
 """
@@ -64,7 +65,9 @@ def dissolve_gpd_output(agpd, path_out):
 
       #  print(label)
         union_gpd = agpd[agpd['label'] == label].unary_union
-        dissolved = dissolved.append([{"label":label,"geometry":union_gpd}])
+        dissolved = gpd.GeoDataFrame(
+            pd.concat([dissolved, gpd.GeoDataFrame([{"label": label, "geometry": union_gpd}])])
+        )
     #print("------")
 
     if '.geojson' not in path_out:
