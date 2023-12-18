@@ -561,10 +561,8 @@ class tif_kernel_iterator_generator:
         except ValueError as e:
             if str(e) != "Center pixel is empty":
                 print(e)
-            # return [0,0,0]
         except Exception as e:
             print(e)
-            # return [0,0,0]
 
     def predict_keras_multi_processing(self, input_x_y_kernel):
         """
@@ -594,11 +592,9 @@ class tif_kernel_iterator_generator:
         except ValueError as e:
             print("Error in multiprocessing prediction:")
             print(e)
-            # return [0,0,0]
         except Exception as e:
             print("Error in multiprocessing prediction:")
             print(e)
-            # return [0,0,0]
 
     def predict_all_output_keras(
         self,
@@ -699,7 +695,6 @@ class tif_kernel_iterator_generator:
                     dtype="object",
                 )
                 print(permutations)
-                # permutations = permutations[permutations != None]
                 print("kernels at first step:")
                 original_shape = permutations.shape[0]
                 print(permutations.shape)
