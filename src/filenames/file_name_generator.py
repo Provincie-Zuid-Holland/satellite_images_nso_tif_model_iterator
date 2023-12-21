@@ -2,10 +2,17 @@ import os
 
 
 class OutputFileNameGenerator:
+    """
+    Generates filenames for output files
+    """
+
     def __init__(self, output_path: str, output_file_name: str):
+        """
+        Note that supported extensions are `.shp` and `.geojson`
+        """
         self.output_path = output_path
         self.extension = output_file_name.split(".")[-1]
-        self.base_name = output_file_name[:-len(self.extension)-1]
+        self.base_name = output_file_name[: -len(self.extension) - 1]
 
     def generate_final_output_path(self) -> str:
         file_name = f"{self.base_name}.{self.extension}"

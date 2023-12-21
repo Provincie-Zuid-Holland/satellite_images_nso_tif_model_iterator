@@ -1,8 +1,8 @@
-# Introduction 
+# Introduction
 
 This repository contains a .tif file (computer vision) model executer which means that it iterates and implements a (computer vision) model on every pixel and/or extracted image kernel in a .tif file.
 As long as a model has a .predict function in python any model can be used in this executer from simple models to deep learning models.
-For more on what image processing kernels are: [Here](https://en.wikipedia.org/wiki/Kernel_(image_processing))
+For more on what image processing kernels are: [Here](<https://en.wikipedia.org/wiki/Kernel_(image_processing)>)
 
 The iterative loop that loops over every pixel and/or extracted image kernel in a .tif, because of the long processing time, can be done in a multi processing loop, which in default this on.
 
@@ -11,36 +11,32 @@ Which means that it can't be run in a (jupyter) notebook interface, it has to be
 Also a databricks pyspark implementation is writing here which is based on this model iterator only written to take advantage of apache spark.
 Found in the ./pspark folder.
 
-# Dependencies.
-If you are a Windows user you have to install the dependencies via wheels. The wheels for the following dependencies should be downloaded from https://www.lfd.uci.edu/~gohlke/pythonlibs/:
+# Installation
 
-- [![GDAL>=3.0.4 ](https://img.shields.io/badge/GDAL-%3E%3D3.0.4-blue)](https://gdal.org/)
-- [![Fiona>=1.8.13 ](https://img.shields.io/badge/Fiona-%3E%3D1.8.13-green)](https://pypi.org/project/Fiona/)
-- [![rasterio>=1.1.3 ](https://img.shields.io/badge/rasterio-%3E%3D1.1.3-blue)](https://rasterio.readthedocs.io/en/latest/)
-- [![Shapely>=1.7.0 ](https://img.shields.io/badge/Shapely-%3E%3D1.7.0-green)](https://shapely.readthedocs.io/en/stable/manual.html)
-- [![scikit-learn==1.1.3](https://img.shields.io/badge/scikit--learn-%3D%3D1.0.2-blue)](https://scikit-learn.org/stable/)
-- [![NumPy==1.22.4](https://img.shields.io/badge/NumPy-%3D%3D1.22.4-green)](https://numpy.org/)
-- [![geopandas>=0.9.0](https://img.shields.io/badge/geopandas-%3E%3D0.9.0-blue)](https://geopandas.org/en/stable/)
+When working with 64x Windows and Anaconda for your python environment management execute the following terminal commands in order:
 
-These should be installed in de following order: first GDAL, then Fiona and then rasterio. After these you can install the rest.
+```sh
+conda create -n satellite_images_nso_tif_model_iterator python=3.9 -y
+conda activate satellite_images_nso_tif_model_iterator
+pip install -r requirements.txt
+```
 
-Download the wheels according to your system settings. For instance, wheel rasterio 1.2.10 cp39 cp39 win_amd64.whl is used with the 64-bit version of Windows and a 3.9 version of python. Install the wheel with pip install XXX.XX.XX.whl.
+Navigate to the [satellite-images-nso-datascience repository](https://github.com/Provincie-Zuid-Holland/satellite-images-nso-datascience) and then run:
 
-Or else check out this stack overflow post:
-https://gis.stackexchange.com/questions/2276/installing-gdal-with-python-on-windows 
+```sh
+pip install .
+```
 
-In addition to the above wheels, the following packages are also needed:
-- matplotlib
-- tqdm
+# Application
 
-Then run 'pip install .' in the satellite-images-nso-datascience repository, to obtain the nso_ds_classes package.
+Copy `settings_example.py` and rename to `settings.py`. Change the variables in there as desired and then execute `example_iterator.py`.
 
 # (Image Processing) Kernels.
+
 The main functionality of this repository is to extract image kernels and the multiprocessing for loop for looping over all the pixels and/or image kernels in a given satellite .tif file to make predictions on them.
 
-The following picture gives a illustration about how this extracting  of kernels is done:
+The following picture gives a illustration about how this extracting of kernels is done:
 ![Alt text](kernel_extract.png?raw=true "Title")
-
 
 Here below we will have a code example about how this work. In this example we will use a Euclidean distance model to segment all the pixels in a .tif file into segments that are specified in a annotations file.
 
@@ -62,7 +58,7 @@ if __name__ == '__main__':
     x_row = 16
     y_row = 4757
 
-    filename = "PATH/TO/MODEL/MODEL.sav"   
+    filename = "PATH/TO/MODEL/MODEL.sav"
     loaded_model = pickle.load(open(filename, 'rb')
 
     # Setup up a kernel generator for this .tif file.
@@ -82,25 +78,16 @@ if __name__ == '__main__':
     kernel = tif_kernel_generator.get_kernel_for_x_y(x_row,y_row )
     kernel.shape
     #output: (4, 32, 32)
-    # This .tif file contains 4 dimensions in RGBI 
+    # This .tif file contains 4 dimensions in RGBI
 
-    # Iterates and predicts all the pixels in a .tif file with a particular model and stores the dissolved results in the out_path file in a multiprocessing way. So this has to be run from a terminal.  
+    # Iterates and predicts all the pixels in a .tif file with a particular model and stores the dissolved results in the out_path file in a multiprocessing way. So this has to be run from a terminal.
     tif_kernel_generator.predict_all_output(loaded_model, out_path , parts = 3)
 ```
-# Installation.
-
-Install the .whl file in the /dist folder.
 
 # Author
+
 Michael de Winter
 
 # Contact
 
 Contact us at vdwh@pzh.nl
-
-
-
-
-
-
-
