@@ -2,6 +2,7 @@ import glob
 import itertools
 import os
 import random
+import warnings
 from multiprocessing import Pool
 from timeit import default_timer as timer
 from xml.dom import ValidationErr
@@ -18,6 +19,8 @@ from tqdm import tqdm
 
 from src.filenames.file_name_generator import OutputFileNameGenerator
 from src.tif_model_iterator.__nso_ds_output import dissolve_gpd_output
+
+warnings.filterwarnings("ignore", category=UserWarning)
 
 """
     This code is used to extract image processing kernels from nso satellite images .tif images and execute a model on each of those kernels with multi processing for loop.
@@ -331,6 +334,14 @@ class tif_kernel_iterator_generator:
         parts=10,
         begin_part=0,
         bands=[1, 2, 3, 4, 5, 6],
+        band_to_column_name={
+            "band1": "r",
+            "band2": "g",
+            "band3": "b",
+            "band4": "i",
+            "band5": "ndvi",
+            "band6": "height",
+        },
         fade=False,
         normalize_scaler=False,
         multiprocessing=True,
@@ -350,6 +361,7 @@ class tif_kernel_iterator_generator:
         @param parts: break the .tif file in multiple parts, this has to be done since most extracted pixels or kernel don't fit in memory.
         @param begin_part: The part to begin with in order to skip certain parts.
         @param bands: Which bands of the .tif file to use from the .tif file by default this will be all the bands.
+        @param band_to_column_name: Band name to column name dictionary.
         @param fade: Whether to use fading kernels or not, fading is a term I coined to denouced for giving the centrale pixel the most weight in the model while giving less weight the further the other pixels are in the model.
         @param normalize_scaler: Whether to use a normalize/scaler on all the kernels or not, the input here so be a normalize/scaler function. You have to submit the normalizer/scaler as a argument here if you want to use a scaler, this has to be a custom  class like nso_ds_normalize_scaler.
         @param multiprocessing: Whether or not to use multiprocessing for loop for iterating across all the pixels.
@@ -379,7 +391,8 @@ class tif_kernel_iterator_generator:
         self.bands = bands
 
         # Divide the satellite images into multiple parts and loop through the parts, using parts reduces the amount of RAM required to run this process.
-        for x_step in tqdm(range(begin_part, parts)):
+        # for x_step in tqdm(range(begin_part, parts)):
+        for x_step in tqdm(range(20, 25)):
             print("-------")
             print("Part: " + str(x_step + 1) + " of " + str(parts))
             # Calculate the number of permutations for this part.
@@ -421,6 +434,10 @@ class tif_kernel_iterator_generator:
             if normalize_scaler is not False:
                 print("Normalizing/Scaling data")
                 seg_df = normalize_scaler.transform(seg_df)
+
+            # Select correct features for model
+            seg_df = seg_df.rename(band_to_column_name, axis="columns")
+            seg_df = seg_df[amodel.feature_names_in_]
 
             seg_df["permutation"] = permutations
             seg_df = seg_df.dropna()
