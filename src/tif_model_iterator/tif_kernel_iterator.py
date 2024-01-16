@@ -1,10 +1,7 @@
 import glob
-import itertools
 import math
 import os
-import random
 import warnings
-from multiprocessing import Pool
 from timeit import default_timer as timer
 
 import geopandas as gpd
@@ -12,7 +9,6 @@ import numpy as np
 import pandas as pd
 import rasterio
 from shapely.geometry import Polygon
-from sklearn import preprocessing
 from sklearn.base import ClassifierMixin
 from tqdm import tqdm
 
@@ -58,8 +54,6 @@ class TifKernelIteratorGenerator:
             "band6": "height",
         },
         aggregate_output: bool = True,
-        x_size: int = 1,
-        y_size: int = 1,
     ):
         """
 
@@ -72,43 +66,19 @@ class TifKernelIteratorGenerator:
         @param normalize_scaler: Whether to use a normalize/scaler on all the kernels or not, the input here so be a normalize/scaler function. You have to submit the normalizer/scaler as a argument here if you want to use a scaler, this has to be a custom  class like nso_ds_normalize_scaler.
         @param band_to_column_name: Band name to column name dictionary.
         @param aggregate_output: 50 cm is the default resolution but we can aggregate to 2m.
-        @param x_size: the x size of the kernel. For example if x and y are 32 you get a 32 by y kernel.
-        @param y_size: the y size of the kernel. For example if x and y are 32 you get a x by 32 kernel.
         """
-
-        self.dataset = rasterio.open(path_to_tif_file)
-        meta = self.dataset.meta.copy()
-        data = self.dataset.read()
-        width, height = meta["width"], meta["height"]
-
-        self.data = data
-
-        self.bands = [band + 1 for band in range(0, data.shape[0])]
-
-        self.path_to_tif_file = path_to_tif_file
-
-        self.width = width
-        self.height = height
-
-        self.x_size = x_size
-        self.x_size_begin = round(x_size / 2)
-        self.x_size_end = round(x_size / 2)
-
-        self.y_size = y_size
-        self.y_size_begin = round(y_size / 2)
-        self.y_size_end = round(y_size / 2)
-
-        # Skipping using a kernel if the kernel size is 1 for beter performance.
-        self.pixel_values = True if x_size == 1 and y_size == 1 else False
-
-        self.sat_name = path_to_tif_file.split("/")[-1]
-
         self.model = model
         self.output_file_name_generator = output_file_name_generator
         self.parts = parts
         self.normalize_scaler = normalize_scaler
         self.band_to_column_name = band_to_column_name
         self.aggregate_output = aggregate_output
+
+        self.dataset = rasterio.open(path_to_tif_file)
+        meta = self.dataset.meta.copy()
+        self.data = self.dataset.read()
+        self.width, self.height = meta["width"], meta["height"]
+        self.bands = [band + 1 for band in range(0, self.data.shape[0])]
 
     def create_pixel_coordinate_dataframe(
         self, data: np.array, left_boundary: int
@@ -355,9 +325,9 @@ class TifKernelIteratorGenerator:
 
         @param begin_part: Allows you to begin at a later part, if your computer froze halfway
         """
-        x_step_size = math.ceil(self.get_height() / self.parts)
+        x_step_size = math.ceil(self.height / self.parts)
         bottom = 0
-        top = self.get_width()
+        top = self.width
 
         # Divide the satellite images into multiple parts and loop through the parts, using parts reduces the amount of RAM required to run this process.
         for x_step in tqdm(range(begin_part, self.parts)):

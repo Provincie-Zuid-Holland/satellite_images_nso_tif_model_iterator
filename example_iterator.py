@@ -7,8 +7,7 @@ from src.tif_model_iterator import tif_kernel_iterator
 
 if __name__ == "__main__":
     filename = settings.MODEL_PATH
-    loaded_model = pickle.load(open(filename, "rb"))[0]["model"]
-    # loaded_model = pickle.load(open(filename, "rb"))
+    loaded_model = pickle.load(open(filename, "rb"))
 
     tif_file = settings.TIF_FILE
     output_path = settings.OUTPUT_PATH
@@ -28,7 +27,7 @@ if __name__ == "__main__":
         path_to_tif_file=tif_file,
         model=loaded_model,
         output_file_name_generator=output_file_name_generator,
-        parts=20,
+        parts=10,
         normalize_scaler=scaler,
     )
 
