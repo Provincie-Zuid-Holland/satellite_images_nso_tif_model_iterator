@@ -7,8 +7,8 @@ from src.tif_model_iterator import tif_kernel_iterator
 
 if __name__ == "__main__":
     filename = settings.MODEL_PATH
-    # loaded_model = pickle.load(open(filename, "rb"))[0]["model"]
-    loaded_model = pickle.load(open(filename, "rb"))
+    loaded_model = pickle.load(open(filename, "rb"))[0]["model"]
+    # loaded_model = pickle.load(open(filename, "rb"))
 
     tif_file = settings.TIF_FILE
     output_path = settings.OUTPUT_PATH
@@ -24,14 +24,12 @@ if __name__ == "__main__":
         output_path=output_path, output_file_name=output_file_name
     )
 
-    nso_tif_kernel_iterator_generator = (
-        tif_kernel_iterator.tif_kernel_iterator_generator(tif_file)
-    )
-
-    nso_tif_kernel_iterator_generator.predict_all_output(
-        loaded_model,
+    nso_tif_kernel_iterator_generator = tif_kernel_iterator.TifKernelIteratorGenerator(
+        path_to_tif_file=tif_file,
+        model=loaded_model,
         output_file_name_generator=output_file_name_generator,
         parts=20,
-        multiprocessing=False,
         normalize_scaler=scaler,
     )
+
+    nso_tif_kernel_iterator_generator.predict_all_output()

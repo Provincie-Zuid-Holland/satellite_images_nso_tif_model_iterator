@@ -16,6 +16,7 @@ from matplotlib import pyplot as plt
 from rasterio.plot import show
 from shapely.geometry import Polygon
 from sklearn import preprocessing
+from sklearn.base import ClassifierMixin
 from tqdm import tqdm
 
 from src.filenames.file_name_generator import OutputFileNameGenerator
@@ -32,7 +33,7 @@ warnings.filterwarnings("ignore", category=UserWarning)
 """
 
 
-class tif_kernel_iterator_generator:
+class TifKernelIteratorGenerator:
 
     """
     This class set up a .tif image in order to easily extracts kernel from it.
@@ -44,7 +45,25 @@ class tif_kernel_iterator_generator:
 
     """
 
-    def __init__(self, path_to_tif_file: str, x_size: int = 1, y_size: int = 1):
+    def __init__(
+        self,
+        path_to_tif_file: str,
+        model: ClassifierMixin,
+        output_file_name_generator: OutputFileNameGenerator,
+        parts: int,
+        normalize_scaler: str = False,
+        band_to_column_name: dict = {
+            "band1": "r",
+            "band2": "g",
+            "band3": "b",
+            "band4": "i",
+            "band5": "ndvi",
+            "band6": "height",
+        },
+        aggregate_output: bool = True,
+        x_size: int = 1,
+        y_size: int = 1,
+    ):
         """
 
         Init of the nso tif kernel.
@@ -61,7 +80,7 @@ class tif_kernel_iterator_generator:
 
         self.data = data
 
-        self.bands = data.shape[0]
+        self.bands = [band + 1 for band in range(0, data.shape[0])]
 
         self.path_to_tif_file = path_to_tif_file
 
@@ -80,6 +99,13 @@ class tif_kernel_iterator_generator:
         self.pixel_values = True if x_size == 1 and y_size == 1 else False
 
         self.sat_name = path_to_tif_file.split("/")[-1]
+
+        self.model = model
+        self.output_file_name_generator = output_file_name_generator
+        self.parts = parts
+        self.normalize_scaler = normalize_scaler
+        self.band_to_column_name = band_to_column_name
+        self.aggregate_output = aggregate_output
 
     def set_fade_kernel(self, fade_power=0.045, bands=0):
         """
@@ -325,23 +351,186 @@ class tif_kernel_iterator_generator:
             print(e)
             return [0, 0, 0]
 
+    def create_pixel_coordinate_dataframe(
+        self, data: pd.DataFrame, left_boundary: int
+    ) -> pd.DataFrame:
+        print("Creating Pixel Coordinates")
+        start = timer()
+        z_shape = data.shape[0]
+        x_shape = data.shape[1]
+        y_shape = data.shape[2]
+        x_coordinates = [
+            [left_boundary + x for y in range(0, data.shape[2])]
+            for x in range(0, data.shape[1])
+        ]
+        y_coordinates = [
+            [y for y in range(0, data.shape[2])] for x in range(0, data.shape[1])
+        ]
+        rd_x, rd_y = rasterio.transform.xy(
+            self.dataset.transform, x_coordinates, y_coordinates
+        )
+        data = np.append(data, rd_x).reshape([z_shape + 1, x_shape, y_shape])
+        data = np.append(data, rd_y).reshape([z_shape + 2, x_shape, y_shape])
+        data = data.reshape(-1, x_shape * y_shape).transpose()
+
+        df = pd.DataFrame(
+            data,
+            columns=["band" + str(band) for band in self.bands] + ["rd_x", "rd_y"],
+        )
+
+        print(
+            f"Pixel coordinates creation finished in: {str(timer() - start)} second(s)"
+        )
+        return df
+
+    @staticmethod
+    def filter_out_empty_pixels(df: pd.DataFrame) -> pd.DataFrame:
+        # We want to have RGB values != 0 for any point we want to predict on RGB is in bands 1,2,3
+        non_empty_pixel_mask = (
+            df[["band" + str(band) for band in [1, 2, 3]]] != 0
+        ).any(axis="columns")
+        return df[non_empty_pixel_mask]
+
+    def predict_labels(
+        self,
+        df: pd.DataFrame,
+    ) -> pd.DataFrame:
+        print("Predicting labels")
+        start = timer()
+        df = df.rename(self.band_to_column_name, axis="columns")
+        feature_names = getattr(self.model, "feature_names_in_", None)
+        if feature_names is not None:
+            X = df[self.model.feature_names_in_]
+        else:
+            X = df.iloc[:, : len(self.bands)].values
+        df["label"] = self.model.predict(X)
+        print(f"Predicting finished in: {str(timer() - start)} second(s)")
+        return df
+
+    @staticmethod
+    def aggregate_pixel_labels(df: pd.DataFrame, new_pixel_size: int) -> pd.DataFrame:
+        # Aggregates to roughly new_pixel_size * new_pixel_size meters
+        print("Aggregating pixels")
+        start = timer()
+        df["x_group"] = np.round(df["rd_x"] / new_pixel_size) * new_pixel_size
+        df["y_group"] = np.round(df["rd_y"] / new_pixel_size) * new_pixel_size
+
+        # Faster way to get mode of label for groupby [x_group, y_group]
+        # See: https://stackoverflow.com/questions/15222754/groupby-pandas-dataframe-and-select-most-common-value
+        df = (
+            df.groupby(["x_group", "y_group", "label"])
+            .size()
+            .to_frame("count")
+            .reset_index()
+            .sort_values("count", ascending=False)
+            .drop_duplicates(subset=["x_group", "y_group"])
+        )
+        df = df.rename({"x_group": "rd_x", "y_group": "rd_y"}, axis="columns")
+
+        df = df[["rd_x", "rd_y", "label"]]
+        print(f"Aggregating finished in: {str(timer() - start)} second(s)")
+        return df
+
+    @staticmethod
+    def transform_to_polygons(df: pd.DataFrame) -> gpd.GeoDataFrame:
+        print("Creating geometry")
+        start = timer()
+
+        # Make squares from the the pixels in order to make contected polygons from them.
+        df["geometry"] = [
+            func_cor_square(permutation)
+            for permutation in df[["rd_x", "rd_y"]].to_numpy().tolist()
+        ]
+
+        df = df[["geometry", "label"]]
+
+        gdf = gpd.GeoDataFrame(df, geometry=df.geometry)
+        gdf = gdf.set_crs(epsg=28992)
+        print("Geometry made in: " + str(timer() - start) + " second(s)")
+        return gdf
+
+    def write_part_to_file(
+        self,
+        gdf: gpd.GeoDataFrame,
+        step: int,
+    ):
+        print("Writing to file")
+        start = timer()
+        output_file_name = self.output_file_name_generator.generate_part_output_path(
+            step
+        )
+        dissolve_gpd_output(gdf, output_file_name)
+
+        print("Writing finished in: " + str(timer() - start) + " second(s)")
+
+    def write_full_gdf_to_file(self):
+        all_part_files = glob.glob(
+            self.output_file_name_generator.glob_wild_card_for_part_extension_only()
+        )
+        all_part = pd.concat([gpd.read_file(file) for file in all_part_files])
+
+        try:
+            if (
+                str(type(self.model))
+                != "<class 'nso_ds_classes.nso_ds_models.deep_learning_model'>"
+                or str(type(self.model))
+                == "<class 'nso_ds_classes.nso_ds_models.waterleiding_ahn_ndvi_model'>"
+            ):
+                all_part["label"] = all_part.apply(
+                    lambda x: self.model.get_class_label(x["label"]), axis=1
+                )
+        except Exception as e:
+            print(e)
+        final_output_path = self.output_file_name_generator.generate_final_output_path()
+        all_part.dissolve(by="label").to_file(final_output_path)
+
+    def clean_up_part_files(self):
+        for file in glob.glob(
+            self.output_file_name_generator.glob_wild_card_for_all_part_files()
+        ):
+            os.remove(os.path.join(self.output_file_name_generator.output_path, file))
+
+    def create_and_write_part_output(
+        self,
+        x_step: int,
+        x_step_size: int,
+        bottom: int,
+        top: int,
+    ):
+        print("-------")
+        print("Part: " + str(x_step + 1) + " of " + str(self.parts))
+        left_boundary = x_step * x_step_size
+        right_boundary = (x_step + 1) * x_step_size
+
+        subset_data = self.data[:, left_boundary:right_boundary, bottom:top]
+
+        subset_df = self.create_pixel_coordinate_dataframe(
+            data=subset_data, left_boundary=left_boundary
+        )
+
+        subset_df = self.filter_out_empty_pixels(subset_df)
+
+        # Check if a normalizer or a  scaler has to be used.
+        if self.normalize_scaler is not False:
+            print("Normalizing/Scaling data")
+            start = timer()
+            subset_df = self.normalize_scaler.transform(subset_df)
+            print(f"Normalizing/scaling finished in: {str(timer() - start)} second(s)")
+
+        subset_df = self.predict_labels(df=subset_df)
+
+        if self.aggregate_output:
+            subset_df = self.aggregate_pixel_labels(subset_df, new_pixel_size=2)
+
+        subset_df = self.transform_to_polygons(subset_df)
+        self.write_part_to_file(
+            gdf=subset_df,
+            step=x_step,
+        )
+
     def predict_all_output(
         self,
-        amodel,
-        output_file_name_generator: OutputFileNameGenerator,
-        aggregate_output=True,
-        parts=10,
         begin_part=0,
-        bands=[1, 2, 3, 4, 5, 6],
-        band_to_column_name={
-            "band1": "r",
-            "band2": "g",
-            "band3": "b",
-            "band4": "i",
-            "band5": "ndvi",
-            "band6": "height",
-        },
-        normalize_scaler=False,
     ):
         """
         A multiprocessing iterator which predicts all pixel in a raster .tif, based on there kernels.
@@ -363,157 +552,18 @@ class tif_kernel_iterator_generator:
         @param normalize_scaler: Whether to use a normalize/scaler on all the kernels or not, the input here so be a normalize/scaler function. You have to submit the normalizer/scaler as a argument here if you want to use a scaler, this has to be a custom  class like nso_ds_normalize_scaler.
         @param multiprocessing: Whether or not to use multiprocessing for loop for iterating across all the pixels.
         """
-        x_step_size = math.ceil(self.get_height() / parts)
+        x_step_size = math.ceil(self.get_height() / self.parts)
         bottom = 0
         top = self.get_width()
 
         # Divide the satellite images into multiple parts and loop through the parts, using parts reduces the amount of RAM required to run this process.
-        for x_step in tqdm(range(begin_part, parts)):
-            print("-------")
-            print("Part: " + str(x_step + 1) + " of " + str(parts))
-
-            print("Creating Pixel Coordinates")
-            start = timer()
-            left_boundary = x_step * x_step_size
-            right_boundary = (x_step + 1) * x_step_size
-
-            subset_data = self.data[:, left_boundary:right_boundary, bottom:top]
-            z_shape = subset_data.shape[0]
-            x_shape = subset_data.shape[1]
-            y_shape = subset_data.shape[2]
-            x_coordinates = [
-                [left_boundary + x for y in range(0, subset_data.shape[2])]
-                for x in range(0, subset_data.shape[1])
-            ]
-            y_coordinates = [
-                [y for y in range(0, subset_data.shape[2])]
-                for x in range(0, subset_data.shape[1])
-            ]
-            rd_x, rd_y = rasterio.transform.xy(
-                self.dataset.transform, x_coordinates, y_coordinates
-            )
-            subset_data = np.append(subset_data, rd_x).reshape(
-                [z_shape + 1, x_shape, y_shape]
-            )
-            subset_data = np.append(subset_data, rd_y).reshape(
-                [z_shape + 2, x_shape, y_shape]
-            )
-            subset_data = subset_data.reshape(-1, x_shape * y_shape).transpose()
-
-            subset_df = pd.DataFrame(
-                subset_data,
-                columns=["band" + str(band) for band in bands] + ["rd_x", "rd_y"],
+        for x_step in tqdm(range(begin_part, self.parts)):
+            self.create_and_write_part_output(
+                x_step=x_step, x_step_size=x_step_size, bottom=bottom, top=top
             )
 
-            # We want to have RGB values != 0 for any point we want to predict on
-            non_empty_pixel_mask = (
-                subset_df[["band" + str(band) for band in [1, 2, 3]]] != 0
-            ).any(axis="columns")
-            subset_df = subset_df[non_empty_pixel_mask]
-
-            print(
-                f"Pixel coordinates creation finished in: {str(timer() - start)} second(s)"
-            )
-
-            # Check if a normalizer or a  scaler has to be used.
-            if normalize_scaler is not False:
-                print("Normalizing/Scaling data")
-                start = timer()
-                subset_df = normalize_scaler.transform(subset_df)
-                print(
-                    f"Normalizing/scaling finished in: {str(timer() - start)} second(s)"
-                )
-
-            # Select correct features for model
-            print("Predicting labels")
-            start = timer()
-            subset_df = subset_df.rename(band_to_column_name, axis="columns")
-            feature_names = getattr(amodel, "feature_names_in_", None)
-            if feature_names is not None:
-                X = subset_df[amodel.feature_names_in_]
-            else:
-                X = subset_df.iloc[:, : len(bands)].values
-            subset_df["label"] = amodel.predict(X)
-            print(f"Predicting finished in: {str(timer() - start)} second(s)")
-
-            if aggregate_output == True:
-                print("Aggregating pixels")
-                start = timer()
-                subset_df["x_group"] = np.round(subset_df["rd_x"] / 2) * 2
-                subset_df["y_group"] = np.round(subset_df["rd_y"] / 2) * 2
-                subset_df = pd.DataFrame(
-                    {
-                        "label": subset_df.groupby(["x_group", "y_group"])["label"].agg(
-                            lambda label: pd.Series.mode(label)[0]
-                        )
-                    }
-                )
-
-                subset_df["rd_x"] = list(map(lambda x: x[0], subset_df.index))
-                subset_df["rd_y"] = list(map(lambda x: x[1], subset_df.index))
-
-                subset_df = subset_df[["rd_x", "rd_y", "label"]]
-                print(f"Aggregating finished in: {str(timer() - start)} second(s)")
-
-            print("Creating geometry")
-            start = timer()
-
-            # Make squares from the the pixels in order to make contected polygons from them.
-            subset_df["geometry"] = [
-                func_cor_square(permutation)
-                for permutation in subset_df[["rd_x", "rd_y"]].to_numpy().tolist()
-            ]
-
-            subset_df = subset_df[["geometry", "label"]]
-
-            # Store the results in a geopandas dataframe.
-            subset_df = gpd.GeoDataFrame(subset_df, geometry=subset_df.geometry)
-            subset_df = subset_df.set_crs(epsg=28992)
-            print("Geometry made in: " + str(timer() - start) + " second(s)")
-            print("Writing to file")
-            start = timer()
-            output_file_name = output_file_name_generator.generate_part_output_path(
-                x_step
-            )
-            dissolve_gpd_output(subset_df, output_file_name)
-            print(output_file_name)
-
-            print("Writing finished in: " + str(timer() - start) + " second(s)")
-            print(subset_df.columns)
-            del subset_df
-
-        all_part = 0
-        first_check = 0
-
-        for file in glob.glob(
-            output_file_name_generator.glob_wild_card_for_part_extension_only()
-        ):
-            if first_check == 0:
-                all_part = gpd.read_file(file)
-                first_check = 1
-            else:
-                print(f"Appending {file}")
-                all_part = pd.concat([all_part, gpd.read_file(file)])
-
-        try:
-            if (
-                str(type(amodel))
-                != "<class 'nso_ds_classes.nso_ds_models.deep_learning_model'>"
-                or str(type(amodel))
-                == "<class 'nso_ds_classes.nso_ds_models.waterleiding_ahn_ndvi_model'>"
-            ):
-                all_part["label"] = all_part.apply(
-                    lambda x: amodel.get_class_label(x["label"]), axis=1
-                )
-        except Exception as e:
-            print(e)
-        final_output_path = output_file_name_generator.generate_final_output_path()
-        all_part.dissolve(by="label").to_file(final_output_path)
-
-        for file in glob.glob(
-            output_file_name_generator.glob_wild_card_for_all_part_files()
-        ):
-            os.remove(os.path.join(output_file_name_generator.output_path, file))
+        self.write_full_gdf_to_file()
+        self.clean_up_part_files()
 
     def get_kernel_multi_processing(self, input_x_y):
         """
