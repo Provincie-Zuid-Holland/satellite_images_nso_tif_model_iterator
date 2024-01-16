@@ -444,7 +444,12 @@ class tif_kernel_iterator_generator:
 
             # Select correct features for model
             subset_df = subset_df.rename(band_to_column_name, axis="columns")
-            subset_df["label"] = amodel.predict(subset_df[amodel.feature_names_in_])
+            feature_names = getattr(amodel, "feature_names_in_", None)
+            if feature_names:
+                X = subset_df[amodel.feature_names_in_]
+            else:
+                X = subset_df.iloc[:, : len(bands)].values
+            subset_df["label"] = amodel.predict(X)
 
             subset_df = subset_df
             start = timer()
