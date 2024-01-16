@@ -398,6 +398,11 @@ class tif_kernel_iterator_generator:
 
         # Divide the satellite images into multiple parts and loop through the parts, using parts reduces the amount of RAM required to run this process.
         for x_step in tqdm(range(begin_part, parts)):
+            print("-------")
+            print("Part: " + str(x_step + 1) + " of " + str(parts))
+
+            print("Creating Pixel Coordinates")
+            start = timer()
             left_boundary = x_step * x_step_size
             right_boundary = (x_step + 1) * x_step_size
 
@@ -429,62 +434,64 @@ class tif_kernel_iterator_generator:
                 columns=["band" + str(band) for band in bands] + ["rd_x", "rd_y"],
             )
 
+            # We want to have RGB values != 0 for any point we want to predict on
             non_empty_pixel_mask = (
-                subset_df[["band" + str(band) for band in bands]] == 0
-            ).all(axis="columns")
+                subset_df[["band" + str(band) for band in [1, 2, 3]]] != 0
+            ).any(axis="columns")
             subset_df = subset_df[non_empty_pixel_mask]
 
-            print("-------")
-            print("Part: " + str(x_step + 1) + " of " + str(parts))
+            print(
+                f"Pixel coordinates creation finished in: {str(timer() - start)} second(s)"
+            )
 
             # Check if a normalizer or a  scaler has to be used.
             if normalize_scaler is not False:
                 print("Normalizing/Scaling data")
+                start = timer()
                 subset_df = normalize_scaler.transform(subset_df)
+                print(
+                    f"Normalizing/scaling finished in: {str(timer() - start)} second(s)"
+                )
 
             # Select correct features for model
+            print("Predicting labels")
+            start = timer()
             subset_df = subset_df.rename(band_to_column_name, axis="columns")
             feature_names = getattr(amodel, "feature_names_in_", None)
-            if feature_names:
+            if feature_names is not None:
                 X = subset_df[amodel.feature_names_in_]
             else:
                 X = subset_df.iloc[:, : len(bands)].values
             subset_df["label"] = amodel.predict(X)
+            print(f"Predicting finished in: {str(timer() - start)} second(s)")
 
-            subset_df = subset_df
-            start = timer()
             if aggregate_output == True:
+                print("Aggregating pixels")
+                start = timer()
                 subset_df["x_group"] = np.round(subset_df["rd_x"] / 2) * 2
                 subset_df["y_group"] = np.round(subset_df["rd_y"] / 2) * 2
                 subset_df = pd.DataFrame(
                     {
                         "label": subset_df.groupby(["x_group", "y_group"])["label"].agg(
-                            pd.Series.mode
+                            lambda label: pd.Series.mode(label)[0]
                         )
                     }
                 )
-                print("Group by finished in: " + str(timer() - start) + " second(s)")
 
-                start = timer()
                 subset_df["rd_x"] = list(map(lambda x: x[0], subset_df.index))
                 subset_df["rd_y"] = list(map(lambda x: x[1], subset_df.index))
-                print("Labels created in: " + str(timer() - start) + " second(s)")
 
                 subset_df = subset_df[["rd_x", "rd_y", "label"]]
+                print(f"Aggregating finished in: {str(timer() - start)} second(s)")
 
+            print("Creating geometry")
             start = timer()
 
             # Make squares from the the pixels in order to make contected polygons from them.
-            if multiprocessing is True:
-                subset_df["geometry"] = p.map(
-                    func_cor_square, subset_df[["rd_x", "rd_y"]].to_numpy().tolist()
-                )
-                p.terminate()
-            else:
-                subset_df["geometry"] = [
-                    func_cor_square(permutation)
-                    for permutation in subset_df[["rd_x", "rd_y"]].to_numpy().tolist()
-                ]
+            subset_df["geometry"] = [
+                func_cor_square(permutation)
+                for permutation in subset_df[["rd_x", "rd_y"]].to_numpy().tolist()
+            ]
 
             subset_df = subset_df[["geometry", "label"]]
 
@@ -492,6 +499,8 @@ class tif_kernel_iterator_generator:
             subset_df = gpd.GeoDataFrame(subset_df, geometry=subset_df.geometry)
             subset_df = subset_df.set_crs(epsg=28992)
             print("Geometry made in: " + str(timer() - start) + " second(s)")
+            print("Writing to file")
+            start = timer()
             output_file_name = output_file_name_generator.generate_part_output_path(
                 x_step
             )
@@ -501,11 +510,6 @@ class tif_kernel_iterator_generator:
             print("Writing finished in: " + str(timer() - start) + " second(s)")
             print(subset_df.columns)
             del subset_df
-            # begin_height = int(round(end_height + 1))
-            # end_height = int(round(begin_height + height_parts))
-
-            # if end_height > self.get_height() - (self.x_size / 2):
-            #     end_height = round(self.get_height() - (self.x_size / 2))
 
         all_part = 0
         first_check = 0
@@ -517,7 +521,7 @@ class tif_kernel_iterator_generator:
                 all_part = gpd.read_file(file)
                 first_check = 1
             else:
-                print("Append")
+                print(f"Appending {file}")
                 all_part = pd.concat([all_part, gpd.read_file(file)])
 
         try:
