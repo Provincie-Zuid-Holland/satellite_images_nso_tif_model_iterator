@@ -6,14 +6,11 @@ import random
 import warnings
 from multiprocessing import Pool
 from timeit import default_timer as timer
-from xml.dom import ValidationErr
 
 import geopandas as gpd
 import numpy as np
 import pandas as pd
 import rasterio
-from matplotlib import pyplot as plt
-from rasterio.plot import show
 from shapely.geometry import Polygon
 from sklearn import preprocessing
 from sklearn.base import ClassifierMixin
@@ -69,6 +66,12 @@ class TifKernelIteratorGenerator:
         Init of the nso tif kernel.
 
         @param path_to_file: A path to a .tif file.
+        @param model: A prediction model with has to have a predict function and uses kernels as input.
+        @param output_file_name_generator: Generates desired filenames for output files
+        @param parts: Into how many parts to break the .tif file, this has to be done since most extracted pixels or kernel don't fit in memory.
+        @param normalize_scaler: Whether to use a normalize/scaler on all the kernels or not, the input here so be a normalize/scaler function. You have to submit the normalizer/scaler as a argument here if you want to use a scaler, this has to be a custom  class like nso_ds_normalize_scaler.
+        @param band_to_column_name: Band name to column name dictionary.
+        @param aggregate_output: 50 cm is the default resolution but we can aggregate to 2m.
         @param x_size: the x size of the kernel. For example if x and y are 32 you get a 32 by y kernel.
         @param y_size: the y size of the kernel. For example if x and y are 32 you get a x by 32 kernel.
         """
@@ -352,8 +355,16 @@ class TifKernelIteratorGenerator:
             return [0, 0, 0]
 
     def create_pixel_coordinate_dataframe(
-        self, data: pd.DataFrame, left_boundary: int
+        self, data: np.array, left_boundary: int
     ) -> pd.DataFrame:
+        """
+        Transforms data, such that it becomes a pandas dataframe with the self.bands columns + rd_x and rd_y coordinates (Rijksdriehoeks coordinates)
+
+        @param data: numpy array such with 3 shapes, first are the bands, then x, then y coordinates
+        @param left_boundary: the x_coordinate coresponding to the left boundary of data
+
+        @return Pandas DataFrame with columns: bands + [rd_x, rd_y]
+        """
         print("Creating Pixel Coordinates")
         start = timer()
         z_shape = data.shape[0]
@@ -385,6 +396,14 @@ class TifKernelIteratorGenerator:
 
     @staticmethod
     def filter_out_empty_pixels(df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Remove pixels which have all RGB values zero, as these correspond to the tif_file not being filled there.
+        Note: RGB corresponds to bands 1, 2, 3.
+
+        @param df: DataFrame with at least bands 1,2,3 for columns
+
+        @return df: Filtered version of df
+        """
         # We want to have RGB values != 0 for any point we want to predict on RGB is in bands 1,2,3
         non_empty_pixel_mask = (
             df[["band" + str(band) for band in [1, 2, 3]]] != 0
@@ -395,6 +414,13 @@ class TifKernelIteratorGenerator:
         self,
         df: pd.DataFrame,
     ) -> pd.DataFrame:
+        """
+        Predicts labels for df
+
+        @param df: DataFrame with bands for column names. Should correspond with self.model features
+
+        @return: As df, but with predict 'label' column added
+        """
         print("Predicting labels")
         start = timer()
         df = df.rename(self.band_to_column_name, axis="columns")
@@ -409,7 +435,15 @@ class TifKernelIteratorGenerator:
 
     @staticmethod
     def aggregate_pixel_labels(df: pd.DataFrame, new_pixel_size: int) -> pd.DataFrame:
-        # Aggregates to roughly new_pixel_size * new_pixel_size meters
+        """
+        Aggregates to new_pixel_size * new_pixel_size meters
+
+        @param df: DataFrame with rd_x and rd_y for coordinates
+        @param new_pixel_size: How many meter the aggregated pixels should be to a side
+
+        @return: Df aggregated to new_pixel_size, using the mode of label for each new pixel
+        """
+
         print("Aggregating pixels")
         start = timer()
         df["x_group"] = np.round(df["rd_x"] / new_pixel_size) * new_pixel_size
@@ -433,10 +467,17 @@ class TifKernelIteratorGenerator:
 
     @staticmethod
     def transform_to_polygons(df: pd.DataFrame) -> gpd.GeoDataFrame:
+        """
+        Changes the rd_x, rd_y coordinates of df into square polygons, so df can be a GeoDataFrame with Polygons as geometry
+
+        @param df: DataFrame with rd_x, rd_y and label columns
+
+        @return gdf: GeoDataFrame like df, but with rd_x and rd_y transposed into a square polygon geometry
+        """
         print("Creating geometry")
         start = timer()
 
-        # Make squares from the the pixels in order to make contected polygons from them.
+        # Make squares from the the pixels in order to make connected polygons from them.
         df["geometry"] = [
             func_cor_square(permutation)
             for permutation in df[["rd_x", "rd_y"]].to_numpy().tolist()
@@ -454,6 +495,12 @@ class TifKernelIteratorGenerator:
         gdf: gpd.GeoDataFrame,
         step: int,
     ):
+        """
+        Writes a part of the tif file to an outputfile.
+
+        @param gdf: GeoDataFrame to write to part file
+        @param step: the step currently being written to file
+        """
         print("Writing to file")
         start = timer()
         output_file_name = self.output_file_name_generator.generate_part_output_path(
@@ -464,10 +511,13 @@ class TifKernelIteratorGenerator:
         print("Writing finished in: " + str(timer() - start) + " second(s)")
 
     def write_full_gdf_to_file(self):
+        """
+        Reads all files of the parts, combines them into 1 and writes the full gdf to file.
+        """
         all_part_files = glob.glob(
             self.output_file_name_generator.glob_wild_card_for_part_extension_only()
         )
-        all_part = pd.concat([gpd.read_file(file) for file in all_part_files])
+        full_gdf = pd.concat([gpd.read_file(file) for file in all_part_files])
 
         try:
             if (
@@ -476,15 +526,18 @@ class TifKernelIteratorGenerator:
                 or str(type(self.model))
                 == "<class 'nso_ds_classes.nso_ds_models.waterleiding_ahn_ndvi_model'>"
             ):
-                all_part["label"] = all_part.apply(
+                full_gdf["label"] = full_gdf.apply(
                     lambda x: self.model.get_class_label(x["label"]), axis=1
                 )
         except Exception as e:
             print(e)
         final_output_path = self.output_file_name_generator.generate_final_output_path()
-        all_part.dissolve(by="label").to_file(final_output_path)
+        full_gdf.dissolve(by="label").to_file(final_output_path)
 
     def clean_up_part_files(self):
+        """
+        Deletes all part files to clean up.
+        """
         for file in glob.glob(
             self.output_file_name_generator.glob_wild_card_for_all_part_files()
         ):
@@ -497,6 +550,14 @@ class TifKernelIteratorGenerator:
         bottom: int,
         top: int,
     ):
+        """
+        Creates the label predictions for a part of self.data and writes it to file
+
+        @param: x_step: Which step is currently being processed
+        @param: x_step_size: The step size for each step in the x direction
+        @param bottom: Lowest y coordinate
+        @param top: Highest y coordinate
+        """
         print("-------")
         print("Part: " + str(x_step + 1) + " of " + str(self.parts))
         left_boundary = x_step * x_step_size
@@ -533,24 +594,10 @@ class TifKernelIteratorGenerator:
         begin_part=0,
     ):
         """
-        A multiprocessing iterator which predicts all pixel in a raster .tif, based on there kernels.
-        Multiprocessing on default is true  so this has to be run from a terminal.
+        Predicts labels for all self.data and writes it to file, by cutting it into parts and
+        using these smaller parts to avoid running out of memory for big files.
 
-        For specifically large .tif files, this file has to be divided into multiple parts.
-        So it can fit into memory, parameters are here which can control that.
-
-        TODO: Make logs for runs.
-
-        @param amodel: A prediction model with has to have a predict function and uses kernels as input.
-        @param output_file_name_generator: Generates desired filenames for output files
-        @param aggregate_output: 50 cm is the default resolution but we can aggregate to 2m.
-        @param parts: break the .tif file in multiple parts, this has to be done since most extracted pixels or kernel don't fit in memory.
-        @param begin_part: The part to begin with in order to skip certain parts.
-        @param bands: Which bands of the .tif file to use from the .tif file by default this will be all the bands.
-        @param band_to_column_name: Band name to column name dictionary.
-        @param fade: Whether to use fading kernels or not, fading is a term I coined to denouced for giving the centrale pixel the most weight in the model while giving less weight the further the other pixels are in the model.
-        @param normalize_scaler: Whether to use a normalize/scaler on all the kernels or not, the input here so be a normalize/scaler function. You have to submit the normalizer/scaler as a argument here if you want to use a scaler, this has to be a custom  class like nso_ds_normalize_scaler.
-        @param multiprocessing: Whether or not to use multiprocessing for loop for iterating across all the pixels.
+        @param begin_part: Allows you to begin at a later part, if your computer froze halfway
         """
         x_step_size = math.ceil(self.get_height() / self.parts)
         bottom = 0
