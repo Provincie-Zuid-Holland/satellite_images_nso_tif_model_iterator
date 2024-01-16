@@ -1,5 +1,6 @@
 import glob
 import itertools
+import math
 import os
 import random
 import warnings
@@ -366,162 +367,140 @@ class tif_kernel_iterator_generator:
         @param normalize_scaler: Whether to use a normalize/scaler on all the kernels or not, the input here so be a normalize/scaler function. You have to submit the normalizer/scaler as a argument here if you want to use a scaler, this has to be a custom  class like nso_ds_normalize_scaler.
         @param multiprocessing: Whether or not to use multiprocessing for loop for iterating across all the pixels.
         """
-        # Set some variables for breaking the .tif in different part parts in order to save memory.
-        total_height = self.get_height() - self.x_size
-
-        height_parts = round(total_height / parts)
-        begin_height = self.x_size_begin
-        end_height = self.x_size_begin + height_parts
-
-        total_width = self.get_width() - self.y_size
-
-        height_parts = total_height / parts
-
-        # Set some variables for multiprocessing.
-        self.set_model(amodel)
         dataset = rasterio.open(self.path_to_tif_file)
 
-        try:
-            self.fade = amodel.get_fade()
-            self.normalize = amodel.get_normalize()
-        except:
-            self.fade = fade
-            self.normalize = normalize_scaler
+        x_step_size = math.ceil(self.get_height() / parts)
+        bottom = 0
+        top = self.get_width()
+        # # Set some variables for breaking the .tif in different part parts in order to save memory.
+        # total_height = self.get_height() - self.x_size
 
-        self.bands = bands
+        # height_parts = round(total_height / parts)
+        # begin_height = self.x_size_begin
+        # end_height = self.x_size_begin + height_parts
+
+        # total_width = self.get_width() - self.y_size
+
+        # height_parts = total_height / parts
+
+        # # Set some variables for multiprocessing.
+        # self.set_model(amodel)
+        # dataset = rasterio.open(self.path_to_tif_file)
+
+        # try:
+        #     self.fade = amodel.get_fade()
+        #     self.normalize = amodel.get_normalize()
+        # except:
+        #     self.fade = fade
+        #     self.normalize = normalize_scaler
+
+        # self.bands = bands
 
         # Divide the satellite images into multiple parts and loop through the parts, using parts reduces the amount of RAM required to run this process.
-        # for x_step in tqdm(range(begin_part, parts)):
-        for x_step in tqdm(range(20, 25)):
+        for x_step in tqdm(range(begin_part, parts)):
+            left_boundary = x_step * x_step_size
+            right_boundary = (x_step + 1) * x_step_size
+
+            subset_data = self.data[:, left_boundary:right_boundary, bottom:top]
+            z_shape = subset_data.shape[0]
+            x_shape = subset_data.shape[1]
+            y_shape = subset_data.shape[2]
+            x_coordinates = [
+                [left_boundary + x for y in range(0, subset_data.shape[2])]
+                for x in range(0, subset_data.shape[1])
+            ]
+            y_coordinates = [
+                [y for y in range(0, subset_data.shape[2])]
+                for x in range(0, subset_data.shape[1])
+            ]
+            rd_x, rd_y = rasterio.transform.xy(
+                dataset.transform, x_coordinates, y_coordinates
+            )
+            subset_data = np.append(subset_data, rd_x).reshape(
+                [z_shape + 1, x_shape, y_shape]
+            )
+            subset_data = np.append(subset_data, rd_y).reshape(
+                [z_shape + 2, x_shape, y_shape]
+            )
+            subset_data = subset_data.reshape(-1, x_shape * y_shape).transpose()
+
+            subset_df = pd.DataFrame(
+                subset_data,
+                columns=["band" + str(band) for band in bands] + ["rd_x", "rd_y"],
+            )
+
+            non_empty_pixel_mask = (
+                subset_df[["band" + str(band) for band in bands]] == 0
+            ).all(axis="columns")
+            subset_df = subset_df[non_empty_pixel_mask]
+
             print("-------")
             print("Part: " + str(x_step + 1) + " of " + str(parts))
-            # Calculate the number of permutations for this part.
-            permutations = list(
-                itertools.product(
-                    [x for x in range(begin_height, end_height)],
-                    [
-                        y
-                        for y in range(
-                            self.y_size_begin, self.get_width() - self.y_size_end
-                        )
-                    ],
-                )
-            )
-            print("Total permutations this step: " + str(len(permutations)))
-
-            # Init the multiprocessing pool.
-            start = timer()
-
-            if multiprocessing is True:
-                p = Pool()
-                seg_df = p.map(self.func_multi_processing_get_kernels, permutations)
-                print(
-                    "Pool kernel fetching finished in: "
-                    + str(timer() - start)
-                    + " second(s)"
-                )
-            else:
-                seg_df = [
-                    self.func_multi_processing_get_kernels(permutation)
-                    for permutation in permutations
-                ]
-
-            seg_df = pd.DataFrame(
-                seg_df, columns=["band" + str(band) for band in bands]
-            )
 
             # Check if a normalizer or a  scaler has to be used.
             if normalize_scaler is not False:
                 print("Normalizing/Scaling data")
-                seg_df = normalize_scaler.transform(seg_df)
+                subset_df = normalize_scaler.transform(subset_df)
 
             # Select correct features for model
-            seg_df = seg_df.rename(band_to_column_name, axis="columns")
-            seg_df = seg_df[amodel.feature_names_in_]
+            subset_df = subset_df.rename(band_to_column_name, axis="columns")
+            subset_df["label"] = amodel.predict(subset_df[amodel.feature_names_in_])
 
-            seg_df["permutation"] = permutations
-            seg_df = seg_df.dropna()
-
-            seg_df = seg_df.values
-            del permutations
-
-            start = timer()
-
-            if multiprocessing is True:
-                seg_df = p.map(self.func_multi_processing_predict, seg_df)
-            else:
-                seg_df = [
-                    self.func_multi_processing_predict(permutation)
-                    for permutation in seg_df
-                ]
-
-            print("Predicting finished in: " + str(timer() - start) + " second(s)")
-
-            seg_df = pd.DataFrame(seg_df, columns=["x_cor", "y_cor", "label"])
-
-            # Filter empty pixels.
-            seg_df = seg_df[(seg_df["x_cor"] != 0) & (seg_df["y_cor"] != 0)]
-            print("Number of used pixels for this step: " + str(len(seg_df)))
-
-            # Get the coordinates for the pixel locations.
-            seg_df["rd_x"], seg_df["rd_y"] = rasterio.transform.xy(
-                dataset.transform, seg_df["x_cor"], seg_df["y_cor"]
-            )
-
-            print("Got coordinates for pixels: " + str(timer() - start) + " second(s)")
-
-            seg_df = seg_df.drop(["y_cor", "x_cor"], axis=1)
-
+            subset_df = subset_df
             start = timer()
             if aggregate_output == True:
-                seg_df["x_group"] = np.round(seg_df["rd_x"] / 2) * 2
-                seg_df["y_group"] = np.round(seg_df["rd_y"] / 2) * 2
-                seg_df = seg_df.groupby(["x_group", "y_group"]).agg(
-                    label=("label", lambda x: x.value_counts().index[0])
+                subset_df["x_group"] = np.round(subset_df["rd_x"] / 2) * 2
+                subset_df["y_group"] = np.round(subset_df["rd_y"] / 2) * 2
+                subset_df = pd.DataFrame(
+                    {
+                        "label": subset_df.groupby(["x_group", "y_group"])["label"].agg(
+                            pd.Series.mode
+                        )
+                    }
                 )
                 print("Group by finished in: " + str(timer() - start) + " second(s)")
 
                 start = timer()
-                seg_df["rd_x"] = list(map(lambda x: x[0], seg_df.index))
-                seg_df["rd_y"] = list(map(lambda x: x[1], seg_df.index))
+                subset_df["rd_x"] = list(map(lambda x: x[0], subset_df.index))
+                subset_df["rd_y"] = list(map(lambda x: x[1], subset_df.index))
                 print("Labels created in: " + str(timer() - start) + " second(s)")
 
-                seg_df = seg_df[["rd_x", "rd_y", "label"]]
+                subset_df = subset_df[["rd_x", "rd_y", "label"]]
 
             start = timer()
 
             # Make squares from the the pixels in order to make contected polygons from them.
             if multiprocessing is True:
-                seg_df["geometry"] = p.map(
-                    func_cor_square, seg_df[["rd_x", "rd_y"]].to_numpy().tolist()
+                subset_df["geometry"] = p.map(
+                    func_cor_square, subset_df[["rd_x", "rd_y"]].to_numpy().tolist()
                 )
                 p.terminate()
             else:
-                seg_df["geometry"] = [
+                subset_df["geometry"] = [
                     func_cor_square(permutation)
-                    for permutation in seg_df[["rd_x", "rd_y"]].to_numpy().tolist()
+                    for permutation in subset_df[["rd_x", "rd_y"]].to_numpy().tolist()
                 ]
 
-            seg_df = seg_df[["geometry", "label"]]
+            subset_df = subset_df[["geometry", "label"]]
 
             # Store the results in a geopandas dataframe.
-            seg_df = gpd.GeoDataFrame(seg_df, geometry=seg_df.geometry)
-            seg_df = seg_df.set_crs(epsg=28992)
+            subset_df = gpd.GeoDataFrame(subset_df, geometry=subset_df.geometry)
+            subset_df = subset_df.set_crs(epsg=28992)
             print("Geometry made in: " + str(timer() - start) + " second(s)")
             output_file_name = output_file_name_generator.generate_part_output_path(
                 x_step
             )
-            dissolve_gpd_output(seg_df, output_file_name)
+            dissolve_gpd_output(subset_df, output_file_name)
             print(output_file_name)
 
             print("Writing finished in: " + str(timer() - start) + " second(s)")
-            print(seg_df.columns)
-            del seg_df
-            begin_height = int(round(end_height + 1))
-            end_height = int(round(begin_height + height_parts))
+            print(subset_df.columns)
+            del subset_df
+            # begin_height = int(round(end_height + 1))
+            # end_height = int(round(begin_height + height_parts))
 
-            if end_height > self.get_height() - (self.x_size / 2):
-                end_height = round(self.get_height() - (self.x_size / 2))
+            # if end_height > self.get_height() - (self.x_size / 2):
+            #     end_height = round(self.get_height() - (self.x_size / 2))
 
         all_part = 0
         first_check = 0
