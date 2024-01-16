@@ -80,7 +80,76 @@ class TifKernelIteratorGenerator:
         self.width, self.height = meta["width"], meta["height"]
         self.bands = [band + 1 for band in range(0, self.data.shape[0])]
 
-    def create_pixel_coordinate_dataframe(
+    def predict_all_output(
+        self,
+        begin_part=0,
+    ):
+        """
+        Predicts labels for all self.data and writes it to file, by cutting it into parts and
+        using these smaller parts to avoid running out of memory for big files.
+
+        @param begin_part: Allows you to begin at a later part, if your computer froze halfway
+        """
+        x_step_size = math.ceil(self.height / self.parts)
+        bottom = 0
+        top = self.width
+
+        # Divide the satellite images into multiple parts and loop through the parts, using parts reduces the amount of RAM required to run this process.
+        for x_step in tqdm(range(begin_part, self.parts)):
+            self._create_and_write_part_output(
+                x_step=x_step, x_step_size=x_step_size, bottom=bottom, top=top
+            )
+
+        self._write_full_gdf_to_file()
+        self._clean_up_part_files()
+
+    def _create_and_write_part_output(
+        self,
+        x_step: int,
+        x_step_size: int,
+        bottom: int,
+        top: int,
+    ):
+        """
+        Creates the label predictions for a part of self.data and writes it to file
+
+        @param: x_step: Which step is currently being processed
+        @param: x_step_size: The step size for each step in the x direction
+        @param bottom: Lowest y coordinate
+        @param top: Highest y coordinate
+        """
+        print("-------")
+        print("Part: " + str(x_step + 1) + " of " + str(self.parts))
+        left_boundary = x_step * x_step_size
+        right_boundary = (x_step + 1) * x_step_size
+
+        subset_data = self.data[:, left_boundary:right_boundary, bottom:top]
+
+        subset_df = self._create_pixel_coordinate_dataframe(
+            data=subset_data, left_boundary=left_boundary
+        )
+
+        subset_df = self._filter_out_empty_pixels(subset_df)
+
+        # Check if a normalizer or a  scaler has to be used.
+        if self.normalize_scaler is not False:
+            print("Normalizing/Scaling data")
+            start = timer()
+            subset_df = self.normalize_scaler.transform(subset_df)
+            print(f"Normalizing/scaling finished in: {str(timer() - start)} second(s)")
+
+        subset_df = self._predict_labels(df=subset_df)
+
+        if self.aggregate_output:
+            subset_df = self._aggregate_pixel_labels(subset_df, new_pixel_size=2)
+
+        subset_df = self._transform_to_polygons(subset_df)
+        self._write_part_to_file(
+            gdf=subset_df,
+            step=x_step,
+        )
+
+    def _create_pixel_coordinate_dataframe(
         self, data: np.array, left_boundary: int
     ) -> pd.DataFrame:
         """
@@ -121,7 +190,7 @@ class TifKernelIteratorGenerator:
         return df
 
     @staticmethod
-    def filter_out_empty_pixels(df: pd.DataFrame) -> pd.DataFrame:
+    def _filter_out_empty_pixels(df: pd.DataFrame) -> pd.DataFrame:
         """
         Remove pixels which have all RGB values zero, as these correspond to the tif_file not being filled there.
         Note: RGB corresponds to bands 1, 2, 3.
@@ -136,7 +205,7 @@ class TifKernelIteratorGenerator:
         ).any(axis="columns")
         return df[non_empty_pixel_mask]
 
-    def predict_labels(
+    def _predict_labels(
         self,
         df: pd.DataFrame,
     ) -> pd.DataFrame:
@@ -160,7 +229,7 @@ class TifKernelIteratorGenerator:
         return df
 
     @staticmethod
-    def aggregate_pixel_labels(df: pd.DataFrame, new_pixel_size: int) -> pd.DataFrame:
+    def _aggregate_pixel_labels(df: pd.DataFrame, new_pixel_size: int) -> pd.DataFrame:
         """
         Aggregates to new_pixel_size * new_pixel_size meters
 
@@ -192,7 +261,7 @@ class TifKernelIteratorGenerator:
         return df
 
     @staticmethod
-    def transform_to_polygons(df: pd.DataFrame) -> gpd.GeoDataFrame:
+    def _transform_to_polygons(df: pd.DataFrame) -> gpd.GeoDataFrame:
         """
         Changes the rd_x, rd_y coordinates of df into square polygons, so df can be a GeoDataFrame with Polygons as geometry
 
@@ -216,7 +285,7 @@ class TifKernelIteratorGenerator:
         print("Geometry made in: " + str(timer() - start) + " second(s)")
         return gdf
 
-    def write_part_to_file(
+    def _write_part_to_file(
         self,
         gdf: gpd.GeoDataFrame,
         step: int,
@@ -236,7 +305,7 @@ class TifKernelIteratorGenerator:
 
         print("Writing finished in: " + str(timer() - start) + " second(s)")
 
-    def write_full_gdf_to_file(self):
+    def _write_full_gdf_to_file(self):
         """
         Reads all files of the parts, combines them into 1 and writes the full gdf to file.
         """
@@ -260,7 +329,7 @@ class TifKernelIteratorGenerator:
         final_output_path = self.output_file_name_generator.generate_final_output_path()
         full_gdf.dissolve(by="label").to_file(final_output_path)
 
-    def clean_up_part_files(self):
+    def _clean_up_part_files(self):
         """
         Deletes all part files to clean up.
         """
@@ -269,74 +338,9 @@ class TifKernelIteratorGenerator:
         ):
             os.remove(os.path.join(self.output_file_name_generator.output_path, file))
 
-    def create_and_write_part_output(
-        self,
-        x_step: int,
-        x_step_size: int,
-        bottom: int,
-        top: int,
-    ):
-        """
-        Creates the label predictions for a part of self.data and writes it to file
 
-        @param: x_step: Which step is currently being processed
-        @param: x_step_size: The step size for each step in the x direction
-        @param bottom: Lowest y coordinate
-        @param top: Highest y coordinate
-        """
-        print("-------")
-        print("Part: " + str(x_step + 1) + " of " + str(self.parts))
-        left_boundary = x_step * x_step_size
-        right_boundary = (x_step + 1) * x_step_size
 
-        subset_data = self.data[:, left_boundary:right_boundary, bottom:top]
 
-        subset_df = self.create_pixel_coordinate_dataframe(
-            data=subset_data, left_boundary=left_boundary
-        )
-
-        subset_df = self.filter_out_empty_pixels(subset_df)
-
-        # Check if a normalizer or a  scaler has to be used.
-        if self.normalize_scaler is not False:
-            print("Normalizing/Scaling data")
-            start = timer()
-            subset_df = self.normalize_scaler.transform(subset_df)
-            print(f"Normalizing/scaling finished in: {str(timer() - start)} second(s)")
-
-        subset_df = self.predict_labels(df=subset_df)
-
-        if self.aggregate_output:
-            subset_df = self.aggregate_pixel_labels(subset_df, new_pixel_size=2)
-
-        subset_df = self.transform_to_polygons(subset_df)
-        self.write_part_to_file(
-            gdf=subset_df,
-            step=x_step,
-        )
-
-    def predict_all_output(
-        self,
-        begin_part=0,
-    ):
-        """
-        Predicts labels for all self.data and writes it to file, by cutting it into parts and
-        using these smaller parts to avoid running out of memory for big files.
-
-        @param begin_part: Allows you to begin at a later part, if your computer froze halfway
-        """
-        x_step_size = math.ceil(self.height / self.parts)
-        bottom = 0
-        top = self.width
-
-        # Divide the satellite images into multiple parts and loop through the parts, using parts reduces the amount of RAM required to run this process.
-        for x_step in tqdm(range(begin_part, self.parts)):
-            self.create_and_write_part_output(
-                x_step=x_step, x_step_size=x_step_size, bottom=bottom, top=top
-            )
-
-        self.write_full_gdf_to_file()
-        self.clean_up_part_files()
 
 
 def func_cor_square(input_x_y):
