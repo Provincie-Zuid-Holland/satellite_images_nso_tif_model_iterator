@@ -54,9 +54,9 @@ class tif_kernel_iterator_generator:
         @param y_size: the y size of the kernel. For example if x and y are 32 you get a x by 32 kernel.
         """
 
-        dataset = rasterio.open(path_to_tif_file)
-        meta = dataset.meta.copy()
-        data = dataset.read()
+        self.dataset = rasterio.open(path_to_tif_file)
+        meta = self.dataset.meta.copy()
+        data = self.dataset.read()
         width, height = meta["width"], meta["height"]
 
         self.data = data
@@ -65,8 +65,6 @@ class tif_kernel_iterator_generator:
 
         self.path_to_tif_file = path_to_tif_file
 
-        # TODO: Because of multiprocessing we can't stored rasterio datasets, multi processing does not support this.
-        # self.dataset = dataset
         self.width = width
         self.height = height
 
@@ -343,9 +341,7 @@ class tif_kernel_iterator_generator:
             "band5": "ndvi",
             "band6": "height",
         },
-        fade=False,
         normalize_scaler=False,
-        multiprocessing=True,
     ):
         """
         A multiprocessing iterator which predicts all pixel in a raster .tif, based on there kernels.
@@ -367,34 +363,9 @@ class tif_kernel_iterator_generator:
         @param normalize_scaler: Whether to use a normalize/scaler on all the kernels or not, the input here so be a normalize/scaler function. You have to submit the normalizer/scaler as a argument here if you want to use a scaler, this has to be a custom  class like nso_ds_normalize_scaler.
         @param multiprocessing: Whether or not to use multiprocessing for loop for iterating across all the pixels.
         """
-        dataset = rasterio.open(self.path_to_tif_file)
-
         x_step_size = math.ceil(self.get_height() / parts)
         bottom = 0
         top = self.get_width()
-        # # Set some variables for breaking the .tif in different part parts in order to save memory.
-        # total_height = self.get_height() - self.x_size
-
-        # height_parts = round(total_height / parts)
-        # begin_height = self.x_size_begin
-        # end_height = self.x_size_begin + height_parts
-
-        # total_width = self.get_width() - self.y_size
-
-        # height_parts = total_height / parts
-
-        # # Set some variables for multiprocessing.
-        # self.set_model(amodel)
-        # dataset = rasterio.open(self.path_to_tif_file)
-
-        # try:
-        #     self.fade = amodel.get_fade()
-        #     self.normalize = amodel.get_normalize()
-        # except:
-        #     self.fade = fade
-        #     self.normalize = normalize_scaler
-
-        # self.bands = bands
 
         # Divide the satellite images into multiple parts and loop through the parts, using parts reduces the amount of RAM required to run this process.
         for x_step in tqdm(range(begin_part, parts)):
@@ -419,7 +390,7 @@ class tif_kernel_iterator_generator:
                 for x in range(0, subset_data.shape[1])
             ]
             rd_x, rd_y = rasterio.transform.xy(
-                dataset.transform, x_coordinates, y_coordinates
+                self.dataset.transform, x_coordinates, y_coordinates
             )
             subset_data = np.append(subset_data, rd_x).reshape(
                 [z_shape + 1, x_shape, y_shape]
