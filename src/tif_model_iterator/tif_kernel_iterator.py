@@ -53,7 +53,7 @@ class TifKernelIteratorGenerator:
             "band5": "ndvi",
             "band6": "height",
         },
-        aggregate_output: bool = True,
+        aggregate_output: int = 0,
     ):
         """
 
@@ -140,8 +140,8 @@ class TifKernelIteratorGenerator:
 
         subset_df = self._predict_labels(df=subset_df)
 
-        if self.aggregate_output:
-            subset_df = self._aggregate_pixel_labels(subset_df, new_pixel_size=2)
+        if self.aggregate_output !=0 :
+            subset_df = self._aggregate_pixel_labels(subset_df, new_pixel_size=self.aggregate_output)
 
         subset_df = self._transform_to_polygons(subset_df)
         self._write_part_to_file(
