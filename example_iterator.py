@@ -23,14 +23,12 @@ if __name__ == "__main__":
         output_path=output_path, output_file_name=output_file_name
     )
 
-    nso_tif_kernel_iterator_generator = (
-        tif_kernel_iterator.tif_kernel_iterator_generator(tif_file)
-    )
-
-    nso_tif_kernel_iterator_generator.predict_all_output(
-        loaded_model,
+    nso_tif_kernel_iterator_generator = tif_kernel_iterator.TifKernelIteratorGenerator(
+        path_to_tif_file=tif_file,
+        model=loaded_model,
         output_file_name_generator=output_file_name_generator,
-        parts=20,
-        multiprocessing=True,
+        parts=10,
         normalize_scaler=scaler,
     )
+
+    nso_tif_kernel_iterator_generator.predict_all_output()
