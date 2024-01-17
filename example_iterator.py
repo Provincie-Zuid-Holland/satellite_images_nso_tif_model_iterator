@@ -4,10 +4,13 @@ import settings
 from src.filenames.file_name_generator import OutputFileNameGenerator
 from src.loaders.normalize_scaler_loader import NormalizeScalerLoader
 from src.tif_model_iterator import tif_kernel_iterator
+import glob
 
 if __name__ == "__main__":
     filename = settings.MODEL_PATH
     loaded_model = pickle.load(open(filename, "rb"))
+
+    
 
     tif_file = settings.TIF_FILE
     output_path = settings.OUTPUT_PATH
@@ -29,6 +32,7 @@ if __name__ == "__main__":
         output_file_name_generator=output_file_name_generator,
         parts=10,
         normalize_scaler=scaler,
+        aggregate_output=2
     )
 
     nso_tif_kernel_iterator_generator.predict_all_output()
