@@ -65,7 +65,7 @@ class TifKernelIteratorGenerator:
         @param parts: Into how many parts to break the .tif file, this has to be done since most extracted pixels or kernel don't fit in memory.
         @param normalize_scaler: Whether to use a normalize/scaler on all the kernels or not, the input here so be a normalize/scaler function. You have to submit the normalizer/scaler as a argument here if you want to use a scaler, this has to be a custom  class like nso_ds_normalize_scaler.
         @param band_to_column_name: Band name to column name dictionary.
-        @param aggregate_output: 50 cm is the default resolution but we can aggregate to 2m.
+        @param aggregate_output: 50 cm is the default resolution but we can aggregate to 2m, RECOMMENDED to use value of 2 for 2 meters
         """
         self.model = model
         self.output_file_name_generator = output_file_name_generator
@@ -131,17 +131,24 @@ class TifKernelIteratorGenerator:
 
         subset_df = self._filter_out_empty_pixels(subset_df)
 
-        # Check if a normalizer or a  scaler has to be used.
+        # Check if a normalizer or a scaler has to be used.
         if self.normalize_scaler is not False:
             print("Normalizing/Scaling data")
             start = timer()
+            df_coords = subset_df[["rd_x", "rd_y"]]
+            subset_df = subset_df.drop(["rd_x", "rd_y"], axis=1)
+            subset_df.columns = self.normalize_scaler.columns_names
             subset_df = self.normalize_scaler.transform(subset_df)
+            subset_df["rd_x"] = df_coords["rd_x"]
+            subset_df["rd_y"] = df_coords["rd_y"]
             print(f"Normalizing/scaling finished in: {str(timer() - start)} second(s)")
 
         subset_df = self._predict_labels(df=subset_df)
 
-        if self.aggregate_output !=0 :
-            subset_df = self._aggregate_pixel_labels(subset_df, new_pixel_size=self.aggregate_output)
+        if self.aggregate_output != 0:
+            subset_df = self._aggregate_pixel_labels(
+                subset_df, new_pixel_size=self.aggregate_output
+            )
 
         subset_df = self._transform_to_polygons(subset_df)
         self._write_part_to_file(
@@ -172,6 +179,7 @@ class TifKernelIteratorGenerator:
         y_coordinates = [
             [y for y in range(0, data.shape[2])] for x in range(0, data.shape[1])
         ]
+
         rd_x, rd_y = rasterio.transform.xy(
             self.dataset.transform, x_coordinates, y_coordinates
         )
@@ -301,7 +309,8 @@ class TifKernelIteratorGenerator:
         output_file_name = self.output_file_name_generator.generate_part_output_path(
             step
         )
-        dissolve_gpd_output(gdf, output_file_name)
+
+        gdf.dissolve(by="label").to_file(output_file_name)
 
         print("Writing finished in: " + str(timer() - start) + " second(s)")
 
@@ -337,10 +346,6 @@ class TifKernelIteratorGenerator:
             self.output_file_name_generator.glob_wild_card_for_all_part_files()
         ):
             os.remove(os.path.join(self.output_file_name_generator.output_path, file))
-
-
-
-
 
 
 def func_cor_square(input_x_y):
