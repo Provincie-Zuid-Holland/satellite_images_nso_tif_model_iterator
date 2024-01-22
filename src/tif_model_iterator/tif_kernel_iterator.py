@@ -131,6 +131,10 @@ class TifKernelIteratorGenerator:
 
         subset_df = self._filter_out_empty_pixels(subset_df)
 
+        if len(subset_df) == 0:
+            print("This part is empty, so we skip the next steps.")
+            return
+
         # Check if a normalizer or a  scaler has to be used.
         if self.normalize_scaler is not False:
             print("Normalizing/Scaling data")
@@ -337,10 +341,6 @@ class TifKernelIteratorGenerator:
             self.output_file_name_generator.glob_wild_card_for_all_part_files()
         ):
             os.remove(os.path.join(self.output_file_name_generator.output_path, file))
-
-
-
-
 
 
 def func_cor_square(input_x_y):
