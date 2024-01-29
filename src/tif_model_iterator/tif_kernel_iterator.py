@@ -131,6 +131,10 @@ class TifKernelIteratorGenerator:
 
         subset_df = self._filter_out_empty_pixels(subset_df)
 
+        if len(subset_df) == 0:
+            print("This part is empty, so we skip the next steps.")
+            return
+
         # Check if a normalizer or a  scaler has to be used.
         if self.normalize_scaler is not False:
             print("Normalizing/Scaling data")
@@ -339,19 +343,20 @@ class TifKernelIteratorGenerator:
             os.remove(os.path.join(self.output_file_name_generator.output_path, file))
 
 
-
-
-
-
-def func_cor_square(input_x_y):
+def func_cor_square(input_x_y, size: float = 2.0):
     """
     This function is used to make squares out of pixels for a inter connected output.
 
     @param input_x_y a pixel input variable to be made into a square.
+    @param size: float that indicates the lenghts of the sides of the square. Note that this should be consistent with the distance between points for the squares to have no overlap.
     @return the the squared pixel.
     """
-    rect = [round(input_x_y[0] / 2) * 2, round(input_x_y[1] / 2) * 2, 0, 0]
-    rect[2], rect[3] = rect[0] + 2, rect[1] + 2
+    rect = [
+        input_x_y[0] - size / 2.0,
+        input_x_y[1] - size / 2.0,
+        input_x_y[0] + size / 2.0,
+        input_x_y[1] + size / 2.0,
+    ]
     coords = Polygon(
         [
             (rect[0], rect[1]),
