@@ -45,14 +45,17 @@ class TifKernelIteratorGenerator:
         output_file_name_generator: OutputFileNameGenerator,
         parts: int,
         normalize_scaler: str = False,
-        band_to_column_name: dict = {
-            "band1": "r",
-            "band2": "g",
-            "band3": "b",
-            "band4": "i",
-            "band5": "ndvi",
-            "band6": "height",
-        },
+        column_names: list = [
+            "r",
+            "g",
+            "b",
+            "n",
+            "e",
+            "d",
+            "ndvi",
+            "re_ndvi",
+            "height",
+        ],
         aggregate_output: bool = True,
     ):
         """
@@ -64,14 +67,14 @@ class TifKernelIteratorGenerator:
         @param output_file_name_generator: Generates desired filenames for output files
         @param parts: Into how many parts to break the .tif file, this has to be done since most extracted pixels or kernel don't fit in memory.
         @param normalize_scaler: Whether to use a normalize/scaler on all the kernels or not, the input here so be a normalize/scaler function. You have to submit the normalizer/scaler as a argument here if you want to use a scaler, this has to be a custom  class like nso_ds_normalize_scaler.
-        @param band_to_column_name: Band name to column name dictionary.
+        @param column_names: names of the bands in the tif file
         @param aggregate_output: 50 cm is the default resolution but we can aggregate to 2m.
         """
         self.model = model
         self.output_file_name_generator = output_file_name_generator
         self.parts = parts
         self.normalize_scaler = normalize_scaler
-        self.band_to_column_name = band_to_column_name
+        self.column_names = column_names
         self.aggregate_output = aggregate_output
 
         self.dataset = rasterio.open(path_to_tif_file)
@@ -131,11 +134,17 @@ class TifKernelIteratorGenerator:
 
         subset_df = self._filter_out_empty_pixels(subset_df)
 
+        if len(subset_df) == 0:
+            print("This part is empty, so we skip the next steps.")
+            return
+
         # Check if a normalizer or a  scaler has to be used.
         if self.normalize_scaler is not False:
             print("Normalizing/Scaling data")
             start = timer()
-            subset_df = self.normalize_scaler.transform(subset_df)
+            subset_df[self.column_names] = self.normalize_scaler.transform(
+                subset_df[self.column_names]
+            )
             print(f"Normalizing/scaling finished in: {str(timer() - start)} second(s)")
 
         subset_df = self._predict_labels(df=subset_df)
@@ -181,7 +190,7 @@ class TifKernelIteratorGenerator:
 
         df = pd.DataFrame(
             data,
-            columns=["band" + str(band) for band in self.bands] + ["rd_x", "rd_y"],
+            columns=self.column_names + ["rd_x", "rd_y"],
         )
 
         print(
@@ -200,9 +209,7 @@ class TifKernelIteratorGenerator:
         @return df: Filtered version of df
         """
         # We want to have RGB values != 0 for any point we want to predict on RGB is in bands 1,2,3
-        non_empty_pixel_mask = (
-            df[["band" + str(band) for band in [1, 2, 3]]] != 0
-        ).any(axis="columns")
+        non_empty_pixel_mask = (df[["r", "g", "b"]] != 0).any(axis="columns")
         return df[non_empty_pixel_mask]
 
     def _predict_labels(
@@ -218,7 +225,6 @@ class TifKernelIteratorGenerator:
         """
         print("Predicting labels")
         start = timer()
-        df = df.rename(self.band_to_column_name, axis="columns")
         feature_names = getattr(self.model, "feature_names_in_", None)
         if feature_names is not None:
             X = df[self.model.feature_names_in_]
@@ -339,19 +345,20 @@ class TifKernelIteratorGenerator:
             os.remove(os.path.join(self.output_file_name_generator.output_path, file))
 
 
-
-
-
-
-def func_cor_square(input_x_y):
+def func_cor_square(input_x_y, size: float = 2.0):
     """
     This function is used to make squares out of pixels for a inter connected output.
 
     @param input_x_y a pixel input variable to be made into a square.
+    @param size: float that indicates the lenghts of the sides of the square. Note that this should be consistent with the distance between points for the squares to have no overlap.
     @return the the squared pixel.
     """
-    rect = [round(input_x_y[0] / 2) * 2, round(input_x_y[1] / 2) * 2, 0, 0]
-    rect[2], rect[3] = rect[0] + 2, rect[1] + 2
+    rect = [
+        input_x_y[0] - size / 2.0,
+        input_x_y[1] - size / 2.0,
+        input_x_y[0] + size / 2.0,
+        input_x_y[1] + size / 2.0,
+    ]
     coords = Polygon(
         [
             (rect[0], rect[1]),
