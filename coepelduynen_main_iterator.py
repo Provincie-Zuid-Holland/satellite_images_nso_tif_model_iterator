@@ -28,20 +28,6 @@ if __name__ == "__main__":
             + tif_file.split("/")[-1].replace(".tif", ".shp").replace("\\", "/")
         )
 
-        scaler = pickle.load(
-            open(
-                [
-                    file
-                    for file in glob.glob(
-                        "C:/repos/satellite-images-nso-datascience/scalers/"
-                        + date
-                        + "*StandardScaler.pkl"
-                    )
-                ][0],
-                "rb",
-            )
-        )
-
         output_file_name_generator = OutputFileNameGenerator(
             output_path=output_path, output_file_name=output_file_name
         )
@@ -49,11 +35,13 @@ if __name__ == "__main__":
         nso_tif_kernel_iterator_generator = (
             tif_kernel_iterator.TifKernelIteratorGenerator(
                 path_to_tif_file=tif_file,
-                model=loaded_model,
+                model=loaded_model["model"],
                 output_file_name_generator=output_file_name_generator,
                 parts=4,
-                normalize_scaler=scaler,
-                aggregate_output=2,
+                normalize_scaler=loaded_model["scaler"],
+                aggregate=False,
+                resolution_aggregate=0.3,
+                column_names=["r", "g", "b", "n", "e", "d", "ndvi", "re_ndvi"],
             )
         )
 

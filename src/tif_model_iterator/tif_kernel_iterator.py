@@ -27,7 +27,6 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 
 class TifKernelIteratorGenerator:
-
     """
     This class set up a .tif image in order to easily extracts kernel from it.
     With various parameters to control the size of the kernel.
@@ -45,15 +44,19 @@ class TifKernelIteratorGenerator:
         output_file_name_generator: OutputFileNameGenerator,
         parts: int,
         normalize_scaler: str = False,
-        band_to_column_name: dict = {
-            "band1": "r",
-            "band2": "g",
-            "band3": "b",
-            "band4": "i",
-            "band5": "ndvi",
-            "band6": "height",
-        },
-        aggregate_output: int = 0,
+        column_names: list = [
+            "r",
+            "g",
+            "b",
+            "n",
+            "e",
+            "d",
+            "ndvi",
+            "re_ndvi",
+            "height",
+        ],
+        aggregate: str = False,
+        resolution_aggregate: int = 0.3,
     ):
         """
 
@@ -64,16 +67,17 @@ class TifKernelIteratorGenerator:
         @param output_file_name_generator: Generates desired filenames for output files
         @param parts: Into how many parts to break the .tif file, this has to be done since most extracted pixels or kernel don't fit in memory.
         @param normalize_scaler: Whether to use a normalize/scaler on all the kernels or not, the input here so be a normalize/scaler function. You have to submit the normalizer/scaler as a argument here if you want to use a scaler, this has to be a custom  class like nso_ds_normalize_scaler.
-        @param band_to_column_name: Band name to column name dictionary.
-        @param aggregate_output: 50 cm is the default resolution but we can aggregate to 2m, RECOMMENDED to use value of 2 for 2 meters
+        @param column_names: names of the bands in the tif file.
+        @param aggregate: Whether or not to aggregate the original pictures.
+        @param resolution_aggregate: The resolution to aggregate the output to in meters, this can be used to increase performance but at the loss of information due to the aggregation.  As a default you should use the resolution of your satellite.  #TODO understand more precisely the base resolution of the satellite constellation.
         """
         self.model = model
         self.output_file_name_generator = output_file_name_generator
         self.parts = parts
         self.normalize_scaler = normalize_scaler
-        self.band_to_column_name = band_to_column_name
-        self.aggregate_output = aggregate_output
-
+        self.column_names = column_names
+        self.aggregate = aggregate
+        self.resolution_aggregate = resolution_aggregate
         self.dataset = rasterio.open(path_to_tif_file)
         meta = self.dataset.meta.copy()
         self.data = self.dataset.read()
@@ -131,26 +135,27 @@ class TifKernelIteratorGenerator:
 
         subset_df = self._filter_out_empty_pixels(subset_df)
 
-        # Check if a normalizer or a scaler has to be used.
+        if len(subset_df) == 0:
+            print("This part is empty, so we skip the next steps.")
+            return
+
+        # Check if a normalizer or a  scaler has to be used.
         if self.normalize_scaler is not False:
             print("Normalizing/Scaling data")
             start = timer()
-            df_coords = subset_df[["rd_x", "rd_y"]]
-            subset_df = subset_df.drop(["rd_x", "rd_y"], axis=1)
-            subset_df.columns = self.normalize_scaler.columns_names
-            subset_df = self.normalize_scaler.transform(subset_df)
-            subset_df["rd_x"] = df_coords["rd_x"]
-            subset_df["rd_y"] = df_coords["rd_y"]
+            subset_df[self.column_names] = self.normalize_scaler.transform(
+                subset_df[self.column_names]
+            )
             print(f"Normalizing/scaling finished in: {str(timer() - start)} second(s)")
 
         subset_df = self._predict_labels(df=subset_df)
 
-        if self.aggregate_output != 0:
+        if self.aggregate != False:
             subset_df = self._aggregate_pixel_labels(
-                subset_df, new_pixel_size=self.aggregate_output
+                subset_df, new_pixel_size=self.resolution_aggregate
             )
 
-        subset_df = self._transform_to_polygons(subset_df)
+        subset_df = self.transform_to_polygons(subset_df)
         self._write_part_to_file(
             gdf=subset_df,
             step=x_step,
@@ -189,7 +194,7 @@ class TifKernelIteratorGenerator:
 
         df = pd.DataFrame(
             data,
-            columns=["band" + str(band) for band in self.bands] + ["rd_x", "rd_y"],
+            columns=self.column_names + ["rd_x", "rd_y"],
         )
 
         print(
@@ -208,9 +213,7 @@ class TifKernelIteratorGenerator:
         @return df: Filtered version of df
         """
         # We want to have RGB values != 0 for any point we want to predict on RGB is in bands 1,2,3
-        non_empty_pixel_mask = (
-            df[["band" + str(band) for band in [1, 2, 3]]] != 0
-        ).any(axis="columns")
+        non_empty_pixel_mask = (df[["r", "g", "b"]] != 0).any(axis="columns")
         return df[non_empty_pixel_mask]
 
     def _predict_labels(
@@ -226,7 +229,6 @@ class TifKernelIteratorGenerator:
         """
         print("Predicting labels")
         start = timer()
-        df = df.rename(self.band_to_column_name, axis="columns")
         feature_names = getattr(self.model, "feature_names_in_", None)
         if feature_names is not None:
             X = df[self.model.feature_names_in_]
@@ -269,7 +271,9 @@ class TifKernelIteratorGenerator:
         return df
 
     @staticmethod
-    def _transform_to_polygons(df: pd.DataFrame) -> gpd.GeoDataFrame:
+    def transform_to_polygons(
+        df: pd.DataFrame, resolution_aggregate: int
+    ) -> gpd.GeoDataFrame:
         """
         Changes the rd_x, rd_y coordinates of df into square polygons, so df can be a GeoDataFrame with Polygons as geometry
 
@@ -281,8 +285,9 @@ class TifKernelIteratorGenerator:
         start = timer()
 
         # Make squares from the the pixels in order to make connected polygons from them.
+
         df["geometry"] = [
-            func_cor_square(permutation)
+            func_cor_square(permutation, resolution_aggregate)
             for permutation in df[["rd_x", "rd_y"]].to_numpy().tolist()
         ]
 
@@ -348,15 +353,22 @@ class TifKernelIteratorGenerator:
             os.remove(os.path.join(self.output_file_name_generator.output_path, file))
 
 
-def func_cor_square(input_x_y):
+def func_cor_square(input_x_y, size: float = 2.0):
     """
     This function is used to make squares out of pixels for a inter connected output.
 
     @param input_x_y a pixel input variable to be made into a square.
+    @param size: float that indicates the lenghts of the sides of the square. Note that this should be consistent with the distance between points for the squares to have no overlap.
     @return the the squared pixel.
     """
-    rect = [round(input_x_y[0] / 2) * 2, round(input_x_y[1] / 2) * 2, 0, 0]
-    rect[2], rect[3] = rect[0] + 2, rect[1] + 2
+
+    # Not sure if dividing by 2 is the correct option.
+    rect = [
+        input_x_y[0] - (size / 2.0),
+        input_x_y[1] - (size / 2.0),
+        input_x_y[0] + (size / 2.0),
+        input_x_y[1] + (size / 2.0),
+    ]
     coords = Polygon(
         [
             (rect[0], rect[1]),
