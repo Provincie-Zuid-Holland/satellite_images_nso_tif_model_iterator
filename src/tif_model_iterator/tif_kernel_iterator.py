@@ -155,7 +155,9 @@ class TifKernelIteratorGenerator:
                 subset_df, new_pixel_size=self.resolution_aggregate
             )
 
-        subset_df = self.transform_to_polygons(subset_df)
+        subset_df = self.transform_to_polygons(
+            subset_df, resolution_aggregate=self.resolution_aggregate
+        )
         self._write_part_to_file(
             gdf=subset_df,
             step=x_step,
