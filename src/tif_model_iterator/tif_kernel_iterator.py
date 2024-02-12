@@ -311,13 +311,17 @@ class TifKernelIteratorGenerator:
         @param gdf: GeoDataFrame to write to part file
         @param step: the step currently being written to file
         """
-        print("Writing to file")
+        print("Dissolving and writing to file")
         start = timer()
         output_file_name = self.output_file_name_generator.generate_part_output_path(
             step
         )
 
-        gdf.dissolve(by="label").to_file(output_file_name)
+        agdf = gdf.dissolve(by="label")
+        print("Dissolving finished in: " + str(timer() - start) + " second(s)")
+
+        start = timer()
+        agdf.to_file(output_file_name)
 
         print("Writing finished in: " + str(timer() - start) + " second(s)")
 
