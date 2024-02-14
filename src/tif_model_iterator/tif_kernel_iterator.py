@@ -187,16 +187,46 @@ class TifKernelIteratorGenerator:
             [y for y in range(0, data.shape[2])] for x in range(0, data.shape[1])
         ]
 
-        rd_x, rd_y = rasterio.transform.xy(
-            self.dataset.transform, x_coordinates, y_coordinates
+        rd_x_ul, rd_y_ul = rasterio.transform.xy(
+            self.dataset.transform, x_coordinates, y_coordinates, offset="ul"
         )
-        data = np.append(data, rd_x).reshape([z_shape + 1, x_shape, y_shape])
-        data = np.append(data, rd_y).reshape([z_shape + 2, x_shape, y_shape])
+
+        rd_x_ur, rd_y_ur = rasterio.transform.xy(
+            self.dataset.transform, x_coordinates, y_coordinates, offset="ur"
+        )
+
+        rd_x_ll, rd_y_ll = rasterio.transform.xy(
+            self.dataset.transform, x_coordinates, y_coordinates, offset="ll"
+        )
+
+        rd_x_lr, rd_y_lr = rasterio.transform.xy(
+            self.dataset.transform, x_coordinates, y_coordinates, offset="lr"
+        )
+
+        data = np.append(data, rd_x_ul).reshape([z_shape + 1, x_shape, y_shape])
+        data = np.append(data, rd_y_ul).reshape([z_shape + 2, x_shape, y_shape])
+        data = np.append(data, rd_x_ur).reshape([z_shape + 3, x_shape, y_shape])
+        data = np.append(data, rd_y_ur).reshape([z_shape + 4, x_shape, y_shape])
+        data = np.append(data, rd_x_ll).reshape([z_shape + 5, x_shape, y_shape])
+        data = np.append(data, rd_y_ll).reshape([z_shape + 6, x_shape, y_shape])
+        data = np.append(data, rd_x_lr).reshape([z_shape + 7, x_shape, y_shape])
+        data = np.append(data, rd_y_lr).reshape([z_shape + 8, x_shape, y_shape])
+
         data = data.reshape(-1, x_shape * y_shape).transpose()
 
         df = pd.DataFrame(
             data,
-            columns=self.column_names + ["rd_x", "rd_y"],
+            columns=self.column_names
+            + [
+                "rd_x_ul",
+                "rd_y_ul",
+                "rd_x_ur",
+                "rd_y_ur",
+                "rd_x_ll",
+                "rd_y_ll",
+                "rd_x_lr",
+                "rd_y_lr",
+            ],
         )
 
         print(
@@ -286,17 +316,35 @@ class TifKernelIteratorGenerator:
         print("Creating geometry")
         start = timer()
 
+        # .buffer(2, cap_style = 3)
+
         # Make squares from the the pixels in order to make connected polygons from them.
 
-        df["geometry"] = [
-            func_cor_square(permutation, resolution_aggregate)
-            for permutation in df[["rd_x", "rd_y"]].to_numpy().tolist()
-        ]
+        # df["geometry"] = [
+        #    func_cor_square(permutation, resolution_aggregate)
+        #    for permutation in df[["rd_x", "rd_y"]].to_numpy().tolist()
+        # ]
+
+        df["geometry"] = df.apply(
+            lambda x: Polygon(
+                [
+                    (x["rd_x_ul"], x["rd_y_ul"]),
+                    (x["rd_x_ur"], x["rd_y_ur"]),
+                    (x["rd_x_lr"], x["rd_y_lr"]),
+                    (x["rd_x_ll"], x["rd_y_ll"]),
+                    (x["rd_x_ul"], x["rd_y_ul"]),
+                ]
+            ),
+            axis=1,
+        )
 
         df = df[["geometry", "label"]]
 
         gdf = gpd.GeoDataFrame(df, geometry=df.geometry)
         gdf = gdf.set_crs(epsg=28992)
+        # gdf = gdf.to_crs(epsg=3395)
+        # gdf["geometry"] = gdf["geometry"].buffer(resolution_aggregate, cap_style=3)
+        # gdf = gdf.to_crs(epsg=28992)
         print("Geometry made in: " + str(timer() - start) + " second(s)")
         return gdf
 
@@ -317,11 +365,16 @@ class TifKernelIteratorGenerator:
             step
         )
 
-        agdf = gdf.dissolve(by="label")
+        gdf = gdf.dissolve(by="label")
         print("Dissolving finished in: " + str(timer() - start) + " second(s)")
 
         start = timer()
-        agdf.to_file(output_file_name)
+
+        if ".geojson" in output_file_name:
+            print("Writing part to geojson")
+            gdf.to_file(output_file_name, driver="GeoJSON")
+        else:
+            gdf.to_file(output_file_name)
 
         print("Writing finished in: " + str(timer() - start) + " second(s)")
 
@@ -347,7 +400,12 @@ class TifKernelIteratorGenerator:
         except Exception as e:
             print(e)
         final_output_path = self.output_file_name_generator.generate_final_output_path()
-        full_gdf.dissolve(by="label").to_file(final_output_path)
+
+        if ".geojson" in final_output_path:
+            print("Writing to geojson")
+            full_gdf.dissolve(by="label").to_file(final_output_path, driver="GeoJSON")
+        else:
+            full_gdf.dissolve(by="label").to_file(final_output_path)
 
     def _clean_up_part_files(self):
         """
@@ -370,10 +428,10 @@ def func_cor_square(input_x_y, size: float = 2.0):
 
     # Not sure if dividing by 2 is the correct option.
     rect = [
-        input_x_y[0] - (size / 2.0),
-        input_x_y[1] - (size / 2.0),
-        input_x_y[0] + (size / 2.0),
-        input_x_y[1] + (size / 2.0),
+        input_x_y[0] - (2.5 / 2.0),
+        input_x_y[1] - (2.5 / 2.0),
+        input_x_y[0] + (2.5 / 2.0),
+        input_x_y[1] + (2.5 / 2.0),
     ]
     coords = Polygon(
         [
@@ -384,4 +442,5 @@ def func_cor_square(input_x_y, size: float = 2.0):
             (rect[0], rect[1]),
         ]
     )
+
     return coords
