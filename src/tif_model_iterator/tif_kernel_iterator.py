@@ -2,6 +2,7 @@ import glob
 import math
 import os
 import warnings
+from copy import deepcopy
 from timeit import default_timer as timer
 
 import geopandas as gpd
@@ -80,6 +81,7 @@ class TifKernelIteratorGenerator:
         self.resolution_aggregate = resolution_aggregate
         self.dataset = rasterio.open(path_to_tif_file)
         meta = self.dataset.meta.copy()
+        self.descriptions = deepcopy(self.dataset.descriptions)
         self.data = self.dataset.read()
         self.width, self.height = meta["width"], meta["height"]
         self.bands = [band + 1 for band in range(0, self.data.shape[0])]
@@ -227,6 +229,7 @@ class TifKernelIteratorGenerator:
                 "rd_x_lr",
                 "rd_y_lr",
             ],
+
         )
 
         print(
