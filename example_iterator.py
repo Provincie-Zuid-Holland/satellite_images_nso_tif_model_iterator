@@ -4,6 +4,7 @@ import settings
 from src.filenames.file_name_generator import OutputFileNameGenerator
 from src.loaders.normalize_scaler_loader import NormalizeScalerLoader
 from src.tif_model_iterator import tif_kernel_iterator
+import glob
 
 if __name__ == "__main__":
     filename = settings.MODEL_PATH

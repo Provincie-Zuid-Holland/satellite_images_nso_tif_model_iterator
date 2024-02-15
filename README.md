@@ -4,19 +4,16 @@ This repository contains a .tif file (computer vision) model executer which mean
 As long as a model has a .predict function in python any model can be used in this executer from simple models to deep learning models.
 For more on what image processing kernels are: [Here](<https://en.wikipedia.org/wiki/Kernel_(image_processing)>)
 
-The iterative loop that loops over every pixel and/or extracted image kernel in a .tif, because of the long processing time, can be done in a multi processing loop, which in default this on.
+The iterative loop that loops over every pixel and/or extracted image kernel in a .tif
 
-Which means that it can't be run in a (jupyter) notebook interface, it has to be run from a terminal and it freezes your computer.
 
-Also a databricks pyspark implementation is writing here which is based on this model iterator only written to take advantage of apache spark.
-Found in the ./pspark folder.
 
 # Installation
 
 When working with 64x Windows and Anaconda for your python environment management execute the following terminal commands in order:
 
 ```sh
-conda create -n satellite_images_nso_tif_model_iterator python=3.9 -y
+conda create -n satellite_images_nso_tif_model_iterator python=3.12 -y
 conda activate satellite_images_nso_tif_model_iterator
 pip install -r requirements.txt
 ```
@@ -24,14 +21,15 @@ pip install -r requirements.txt
 Navigate to the [satellite-images-nso-datascience repository](https://github.com/Provincie-Zuid-Holland/satellite-images-nso-datascience) and then run:
 
 ```sh
-pip install .
+rebuild.bat
 ```
+
 
 # Application
 
 Copy `settings_example.py` and rename to `settings.py`. Change the variables in there as desired and then execute `example_iterator.py`.
 
-# (Image Processing) Kernels.
+# (Image Processing) Kernels TODO this needs to be rewritten.
 
 The main functionality of this repository is to extract image kernels and the multiprocessing for loop for looping over all the pixels and/or image kernels in a given satellite .tif file to make predictions on them.
 
@@ -83,10 +81,14 @@ if __name__ == '__main__':
     # Iterates and predicts all the pixels in a .tif file with a particular model and stores the dissolved results in the out_path file in a multiprocessing way. So this has to be run from a terminal.
     tif_kernel_generator.predict_all_output(loaded_model, out_path , parts = 3)
 ```
+# Performance
+
+We have encountered issue's with writing to .shp files on high resolutions.
+Better to always use .geojson format.
 
 # Author
 
-Michael de Winter
+Michael de Winter, Pieter Kouyzer
 
 # Contact
 

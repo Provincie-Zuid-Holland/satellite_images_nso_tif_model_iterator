@@ -28,7 +28,6 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 
 class TifKernelIteratorGenerator:
-
     """
     This class set up a .tif image in order to easily extracts kernel from it.
     With various parameters to control the size of the kernel.
@@ -57,7 +56,8 @@ class TifKernelIteratorGenerator:
             "re_ndvi",
             "height",
         ],
-        aggregate_output: bool = True,
+        aggregate: str = False,
+        resolution_aggregate: int = 0.3,
     ):
         """
 
@@ -68,16 +68,17 @@ class TifKernelIteratorGenerator:
         @param output_file_name_generator: Generates desired filenames for output files
         @param parts: Into how many parts to break the .tif file, this has to be done since most extracted pixels or kernel don't fit in memory.
         @param normalize_scaler: Whether to use a normalize/scaler on all the kernels or not, the input here so be a normalize/scaler function. You have to submit the normalizer/scaler as a argument here if you want to use a scaler, this has to be a custom  class like nso_ds_normalize_scaler.
-        @param column_names: names of the bands in the tif file
-        @param aggregate_output: 50 cm is the default resolution but we can aggregate to 2m.
+        @param column_names: names of the bands in the tif file.
+        @param aggregate: Whether or not to aggregate the original pictures.
+        @param resolution_aggregate: The resolution to aggregate the output to in meters, this can be used to increase performance but at the loss of information due to the aggregation.  As a default you should use the resolution of your satellite.  #TODO understand more precisely the base resolution of the satellite constellation.
         """
         self.model = model
         self.output_file_name_generator = output_file_name_generator
         self.parts = parts
         self.normalize_scaler = normalize_scaler
         self.column_names = column_names
-        self.aggregate_output = aggregate_output
-
+        self.aggregate = aggregate
+        self.resolution_aggregate = resolution_aggregate
         self.dataset = rasterio.open(path_to_tif_file)
         meta = self.dataset.meta.copy()
         self.descriptions = deepcopy(self.dataset.descriptions)
@@ -151,10 +152,14 @@ class TifKernelIteratorGenerator:
 
         subset_df = self._predict_labels(df=subset_df)
 
-        if self.aggregate_output:
-            subset_df = self._aggregate_pixel_labels(subset_df, new_pixel_size=2)
+        if self.aggregate != False:
+            subset_df = self._aggregate_pixel_labels(
+                subset_df, new_pixel_size=self.resolution_aggregate
+            )
 
-        subset_df = self._transform_to_polygons(subset_df)
+        subset_df = self.transform_to_polygons(
+            subset_df, resolution_aggregate=self.resolution_aggregate
+        )
         self._write_part_to_file(
             gdf=subset_df,
             step=x_step,
@@ -183,16 +188,48 @@ class TifKernelIteratorGenerator:
         y_coordinates = [
             [y for y in range(0, data.shape[2])] for x in range(0, data.shape[1])
         ]
-        rd_x, rd_y = rasterio.transform.xy(
-            self.dataset.transform, x_coordinates, y_coordinates
+
+        rd_x_ul, rd_y_ul = rasterio.transform.xy(
+            self.dataset.transform, x_coordinates, y_coordinates, offset="ul"
         )
-        data = np.append(data, rd_x).reshape([z_shape + 1, x_shape, y_shape])
-        data = np.append(data, rd_y).reshape([z_shape + 2, x_shape, y_shape])
+
+        rd_x_ur, rd_y_ur = rasterio.transform.xy(
+            self.dataset.transform, x_coordinates, y_coordinates, offset="ur"
+        )
+
+        rd_x_ll, rd_y_ll = rasterio.transform.xy(
+            self.dataset.transform, x_coordinates, y_coordinates, offset="ll"
+        )
+
+        rd_x_lr, rd_y_lr = rasterio.transform.xy(
+            self.dataset.transform, x_coordinates, y_coordinates, offset="lr"
+        )
+
+        data = np.append(data, rd_x_ul).reshape([z_shape + 1, x_shape, y_shape])
+        data = np.append(data, rd_y_ul).reshape([z_shape + 2, x_shape, y_shape])
+        data = np.append(data, rd_x_ur).reshape([z_shape + 3, x_shape, y_shape])
+        data = np.append(data, rd_y_ur).reshape([z_shape + 4, x_shape, y_shape])
+        data = np.append(data, rd_x_ll).reshape([z_shape + 5, x_shape, y_shape])
+        data = np.append(data, rd_y_ll).reshape([z_shape + 6, x_shape, y_shape])
+        data = np.append(data, rd_x_lr).reshape([z_shape + 7, x_shape, y_shape])
+        data = np.append(data, rd_y_lr).reshape([z_shape + 8, x_shape, y_shape])
+
         data = data.reshape(-1, x_shape * y_shape).transpose()
 
         df = pd.DataFrame(
             data,
-            columns=self.descriptions + ["rd_x", "rd_y"],
+            columns=self.column_names
+            + [
+                "rd_x_ul",
+                "rd_y_ul",
+                "rd_x_ur",
+                "rd_y_ur",
+                "rd_x_ll",
+                "rd_y_ll",
+                "rd_x_lr",
+                "rd_y_lr",
+            ],
+
         )
 
         print(
@@ -269,7 +306,9 @@ class TifKernelIteratorGenerator:
         return df
 
     @staticmethod
-    def _transform_to_polygons(df: pd.DataFrame) -> gpd.GeoDataFrame:
+    def transform_to_polygons(
+        df: pd.DataFrame, resolution_aggregate: int
+    ) -> gpd.GeoDataFrame:
         """
         Changes the rd_x, rd_y coordinates of df into square polygons, so df can be a GeoDataFrame with Polygons as geometry
 
@@ -280,16 +319,35 @@ class TifKernelIteratorGenerator:
         print("Creating geometry")
         start = timer()
 
+        # .buffer(2, cap_style = 3)
+
         # Make squares from the the pixels in order to make connected polygons from them.
-        df["geometry"] = [
-            func_cor_square(permutation)
-            for permutation in df[["rd_x", "rd_y"]].to_numpy().tolist()
-        ]
+
+        # df["geometry"] = [
+        #    func_cor_square(permutation, resolution_aggregate)
+        #    for permutation in df[["rd_x", "rd_y"]].to_numpy().tolist()
+        # ]
+
+        df["geometry"] = df.apply(
+            lambda x: Polygon(
+                [
+                    (x["rd_x_ul"], x["rd_y_ul"]),
+                    (x["rd_x_ur"], x["rd_y_ur"]),
+                    (x["rd_x_lr"], x["rd_y_lr"]),
+                    (x["rd_x_ll"], x["rd_y_ll"]),
+                    (x["rd_x_ul"], x["rd_y_ul"]),
+                ]
+            ),
+            axis=1,
+        )
 
         df = df[["geometry", "label"]]
 
         gdf = gpd.GeoDataFrame(df, geometry=df.geometry)
         gdf = gdf.set_crs(epsg=28992)
+        # gdf = gdf.to_crs(epsg=3395)
+        # gdf["geometry"] = gdf["geometry"].buffer(resolution_aggregate, cap_style=3)
+        # gdf = gdf.to_crs(epsg=28992)
         print("Geometry made in: " + str(timer() - start) + " second(s)")
         return gdf
 
@@ -304,12 +362,22 @@ class TifKernelIteratorGenerator:
         @param gdf: GeoDataFrame to write to part file
         @param step: the step currently being written to file
         """
-        print("Writing to file")
+        print("Dissolving and writing to file")
         start = timer()
         output_file_name = self.output_file_name_generator.generate_part_output_path(
             step
         )
-        dissolve_gpd_output(gdf, output_file_name)
+
+        gdf = gdf.dissolve(by="label")
+        print("Dissolving finished in: " + str(timer() - start) + " second(s)")
+
+        start = timer()
+
+        if ".geojson" in output_file_name:
+            print("Writing part to geojson")
+            gdf.to_file(output_file_name, driver="GeoJSON")
+        else:
+            gdf.to_file(output_file_name)
 
         print("Writing finished in: " + str(timer() - start) + " second(s)")
 
@@ -335,7 +403,12 @@ class TifKernelIteratorGenerator:
         except Exception as e:
             print(e)
         final_output_path = self.output_file_name_generator.generate_final_output_path()
-        full_gdf.dissolve(by="label").to_file(final_output_path)
+
+        if ".geojson" in final_output_path:
+            print("Writing to geojson")
+            full_gdf.dissolve(by="label").to_file(final_output_path, driver="GeoJSON")
+        else:
+            full_gdf.dissolve(by="label").to_file(final_output_path)
 
     def _clean_up_part_files(self):
         """
@@ -355,11 +428,13 @@ def func_cor_square(input_x_y, size: float = 2.0):
     @param size: float that indicates the lenghts of the sides of the square. Note that this should be consistent with the distance between points for the squares to have no overlap.
     @return the the squared pixel.
     """
+
+    # Not sure if dividing by 2 is the correct option.
     rect = [
-        input_x_y[0] - size / 2.0,
-        input_x_y[1] - size / 2.0,
-        input_x_y[0] + size / 2.0,
-        input_x_y[1] + size / 2.0,
+        input_x_y[0] - (2.5 / 2.0),
+        input_x_y[1] - (2.5 / 2.0),
+        input_x_y[0] + (2.5 / 2.0),
+        input_x_y[1] + (2.5 / 2.0),
     ]
     coords = Polygon(
         [
@@ -370,4 +445,5 @@ def func_cor_square(input_x_y, size: float = 2.0):
             (rect[0], rect[1]),
         ]
     )
+
     return coords
