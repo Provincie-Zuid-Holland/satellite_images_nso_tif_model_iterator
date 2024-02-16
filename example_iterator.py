@@ -20,7 +20,6 @@ if __name__ == "__main__":
         print(tif_file)
 
         tif_file = tif_file.replace("\\", "/")
-        output_path = output_path
         date = output_path.split("/")[-1].split("_")[0]
 
         output_file_name = output_path + tif_file.split("/")[-1].replace(
@@ -38,8 +37,6 @@ if __name__ == "__main__":
                 output_file_name_generator=output_file_name_generator,
                 parts=4,
                 normalize_scaler=loaded_model["scaler"],
-                aggregate=False,
-                resolution_aggregate=0.2,
                 column_names=["r", "g", "b", "n", "e", "d", "ndvi", "re_ndvi"],
             )
         )
