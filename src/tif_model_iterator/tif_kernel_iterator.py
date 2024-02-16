@@ -360,23 +360,12 @@ class TifKernelIteratorGenerator:
         @param step: the step currently being written to file
         """
         print("Dissolving and writing to file")
-        start = timer()
+
         output_file_name = self.output_file_name_generator.generate_part_output_path(
             step
         )
 
-        gdf = gdf.dissolve(by="label")
-        print("Dissolving finished in: " + str(timer() - start) + " second(s)")
-
-        start = timer()
-
-        if ".geojson" in output_file_name:
-            print("Writing part to geojson")
-            gdf.to_file(output_file_name, driver="GeoJSON")
-        else:
-            gdf.to_file(output_file_name)
-
-        print("Writing finished in: " + str(timer() - start) + " second(s)")
+        dissolve_gpd_output(gdf, output_file_name)
 
     def _write_full_gdf_to_file(self):
         """
