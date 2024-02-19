@@ -1,5 +1,5 @@
 MODEL_PATH = ""  # path to .sav file containing sklearn model
-TIF_FILE = ""  # path to satellite image as .tif file
+TIF_FILE_INPUT_REGEX = ""  # path to a directory regex with satellite image as .tif files
 OUTPUT_PATH = ""  # folder where output should go
 OUTPUT_FILENAME = (
     ""  # Filename fo resulsting output file. Ends in either '.shp' or '.geojson'
