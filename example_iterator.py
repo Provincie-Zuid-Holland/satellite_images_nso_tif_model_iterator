@@ -10,24 +10,19 @@ if __name__ == "__main__":
     tif_file_regex = settings.TIF_FILE_INPUT_REGEX
     output_path = settings.OUTPUT_PATH
 
-    print(filename)
     loaded_model = pickle.load(open(filename, "rb"))
+    print("Loaded model: "+filename.split("/")[-1])
+
 
     tif_files = [file for file in glob.glob(tif_file_regex)]
 
     for tif_file in tif_files:
-        print("----------")
-        print(tif_file)
-
         tif_file = tif_file.replace("\\", "/")
-        date = output_path.split("/")[-1].split("_")[0]
-
-        output_file_name = output_path + tif_file.split("/")[-1].replace(
-            ".tif", ".geojson"
-        ).replace("\\", "/")
+        print("----------")
+        print("Implementing model on: "+tif_file)
 
         output_file_name_generator = OutputFileNameGenerator(
-            output_path=output_path, output_file_name=output_file_name
+            output_path=output_path, output_file_name= output_path + tif_file.split("/")[-1].replace(".tif", ".geojson")
         )
 
         nso_tif_kernel_iterator_generator = (
