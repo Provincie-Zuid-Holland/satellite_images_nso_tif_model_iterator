@@ -2,42 +2,38 @@ import pickle
 
 import settings
 from src.filenames.file_name_generator import OutputFileNameGenerator
-from src.loaders.normalize_scaler_loader import NormalizeScalerLoader
 from src.tif_model_iterator import tif_kernel_iterator
 import glob
 
 if __name__ == "__main__":
     filename = settings.MODEL_PATH
-    tif_file = settings.TIF_FILE
+    tif_file_regex = settings.TIF_FILE_INPUT_REGEX
     output_path = settings.OUTPUT_PATH
-    output_file_name = settings.OUTPUT_FILENAME
 
-    artefacts = pickle.load(open(filename, "rb"))
-    if isinstance(artefacts, dict):
-        loaded_model = artefacts["model"]
-        loaded_scaler = artefacts["scaler"]
-    else:
-        loaded_model = artefacts
-        path_to_scaler = settings.PATH_TO_SCALER
-        column_names = settings.COLUMN_NAMES
+    loaded_model = pickle.load(open(filename, "rb"))
+    print("Loaded model: "+filename.split("/")[-1])
 
-        scaler_loader = NormalizeScalerLoader(
-            path_to_scaler_files=path_to_scaler,
-            tif_filepath=tif_file,
-            column_names=column_names,
+
+    tif_files = [file for file in glob.glob(tif_file_regex)]
+
+    for tif_file in tif_files:
+        tif_file = tif_file.replace("\\", "/")
+        print("----------")
+        print("Implementing model on: "+tif_file)
+
+        output_file_name_generator = OutputFileNameGenerator(
+            output_path=output_path, output_file_name= output_path + tif_file.split("/")[-1].replace(".tif", ".geojson")
         )
-        loaded_scaler = scaler_loader.load()
 
-    output_file_name_generator = OutputFileNameGenerator(
-        output_path=output_path, output_file_name=output_file_name
-    )
+        nso_tif_kernel_iterator_generator = (
+            tif_kernel_iterator.TifKernelIteratorGenerator(
+                path_to_tif_file=tif_file,
+                model=loaded_model["model"],
+                output_file_name_generator=output_file_name_generator,
+                parts=4,
+                normalize_scaler=loaded_model["scaler"],
+                column_names=["r", "g", "b", "n", "e", "d", "ndvi", "re_ndvi"],
+            )
+        )
 
-    nso_tif_kernel_iterator_generator = tif_kernel_iterator.TifKernelIteratorGenerator(
-        path_to_tif_file=tif_file,
-        model=loaded_model,
-        output_file_name_generator=output_file_name_generator,
-        parts=10,
-        normalize_scaler=loaded_scaler,
-    )
-
-    nso_tif_kernel_iterator_generator.predict_all_output()
+        nso_tif_kernel_iterator_generator.predict_all_output()

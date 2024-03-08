@@ -56,8 +56,6 @@ class TifKernelIteratorGenerator:
             "re_ndvi",
             "height",
         ],
-        aggregate: str = False,
-        resolution_aggregate: int = 0.3,
     ):
         """
 
@@ -69,16 +67,12 @@ class TifKernelIteratorGenerator:
         @param parts: Into how many parts to break the .tif file, this has to be done since most extracted pixels or kernel don't fit in memory.
         @param normalize_scaler: Whether to use a normalize/scaler on all the kernels or not, the input here so be a normalize/scaler function. You have to submit the normalizer/scaler as a argument here if you want to use a scaler, this has to be a custom  class like nso_ds_normalize_scaler.
         @param column_names: names of the bands in the tif file.
-        @param aggregate: Whether or not to aggregate the original pictures.
-        @param resolution_aggregate: The resolution to aggregate the output to in meters, this can be used to increase performance but at the loss of information due to the aggregation.  As a default you should use the resolution of your satellite.  #TODO understand more precisely the base resolution of the satellite constellation.
         """
         self.model = model
         self.output_file_name_generator = output_file_name_generator
         self.parts = parts
         self.normalize_scaler = normalize_scaler
         self.column_names = column_names
-        self.aggregate = aggregate
-        self.resolution_aggregate = resolution_aggregate
         self.dataset = rasterio.open(path_to_tif_file)
         meta = self.dataset.meta.copy()
         self.descriptions = deepcopy(self.dataset.descriptions)
@@ -152,14 +146,7 @@ class TifKernelIteratorGenerator:
 
         subset_df = self._predict_labels(df=subset_df)
 
-        if self.aggregate != False:
-            subset_df = self._aggregate_pixel_labels(
-                subset_df, new_pixel_size=self.resolution_aggregate
-            )
-
-        subset_df = self.transform_to_polygons(
-            subset_df, resolution_aggregate=self.resolution_aggregate
-        )
+        subset_df = self.transform_to_polygons(subset_df)
         self._write_part_to_file(
             gdf=subset_df,
             step=x_step,
@@ -274,41 +261,7 @@ class TifKernelIteratorGenerator:
         return df
 
     @staticmethod
-    def _aggregate_pixel_labels(df: pd.DataFrame, new_pixel_size: int) -> pd.DataFrame:
-        """
-        Aggregates to new_pixel_size * new_pixel_size meters
-
-        @param df: DataFrame with rd_x and rd_y for coordinates
-        @param new_pixel_size: How many meter the aggregated pixels should be to a side
-
-        @return: Df aggregated to new_pixel_size, using the mode of label for each new pixel
-        """
-
-        print("Aggregating pixels")
-        start = timer()
-        df["x_group"] = np.round(df["rd_x"] / new_pixel_size) * new_pixel_size
-        df["y_group"] = np.round(df["rd_y"] / new_pixel_size) * new_pixel_size
-
-        # Faster way to get mode of label for groupby [x_group, y_group]
-        # See: https://stackoverflow.com/questions/15222754/groupby-pandas-dataframe-and-select-most-common-value
-        df = (
-            df.groupby(["x_group", "y_group", "label"])
-            .size()
-            .to_frame("count")
-            .reset_index()
-            .sort_values("count", ascending=False)
-            .drop_duplicates(subset=["x_group", "y_group"])
-        )
-        df = df.rename({"x_group": "rd_x", "y_group": "rd_y"}, axis="columns")
-
-        df = df[["rd_x", "rd_y", "label"]]
-        print(f"Aggregating finished in: {str(timer() - start)} second(s)")
-        return df
-
-    @staticmethod
-    def transform_to_polygons(
-        df: pd.DataFrame, resolution_aggregate: int
-    ) -> gpd.GeoDataFrame:
+    def transform_to_polygons(df: pd.DataFrame) -> gpd.GeoDataFrame:
         """
         Changes the rd_x, rd_y coordinates of df into square polygons, so df can be a GeoDataFrame with Polygons as geometry
 
@@ -318,16 +271,7 @@ class TifKernelIteratorGenerator:
         """
         print("Creating geometry")
         start = timer()
-
-        # .buffer(2, cap_style = 3)
-
         # Make squares from the the pixels in order to make connected polygons from them.
-
-        # df["geometry"] = [
-        #    func_cor_square(permutation, resolution_aggregate)
-        #    for permutation in df[["rd_x", "rd_y"]].to_numpy().tolist()
-        # ]
-
         df["geometry"] = df.apply(
             lambda x: Polygon(
                 [
@@ -345,9 +289,6 @@ class TifKernelIteratorGenerator:
 
         gdf = gpd.GeoDataFrame(df, geometry=df.geometry)
         gdf = gdf.set_crs(epsg=28992)
-        # gdf = gdf.to_crs(epsg=3395)
-        # gdf["geometry"] = gdf["geometry"].buffer(resolution_aggregate, cap_style=3)
-        # gdf = gdf.to_crs(epsg=28992)
         print("Geometry made in: " + str(timer() - start) + " second(s)")
         return gdf
 
@@ -363,23 +304,12 @@ class TifKernelIteratorGenerator:
         @param step: the step currently being written to file
         """
         print("Dissolving and writing to file")
-        start = timer()
+
         output_file_name = self.output_file_name_generator.generate_part_output_path(
             step
         )
 
-        gdf = gdf.dissolve(by="label")
-        print("Dissolving finished in: " + str(timer() - start) + " second(s)")
-
-        start = timer()
-
-        if ".geojson" in output_file_name:
-            print("Writing part to geojson")
-            gdf.to_file(output_file_name, driver="GeoJSON")
-        else:
-            gdf.to_file(output_file_name)
-
-        print("Writing finished in: " + str(timer() - start) + " second(s)")
+        dissolve_gpd_output(gdf, output_file_name)
 
     def _write_full_gdf_to_file(self):
         """
@@ -418,32 +348,3 @@ class TifKernelIteratorGenerator:
             self.output_file_name_generator.glob_wild_card_for_all_part_files()
         ):
             os.remove(os.path.join(self.output_file_name_generator.output_path, file))
-
-
-def func_cor_square(input_x_y, size: float = 2.0):
-    """
-    This function is used to make squares out of pixels for a inter connected output.
-
-    @param input_x_y a pixel input variable to be made into a square.
-    @param size: float that indicates the lenghts of the sides of the square. Note that this should be consistent with the distance between points for the squares to have no overlap.
-    @return the the squared pixel.
-    """
-
-    # Not sure if dividing by 2 is the correct option.
-    rect = [
-        input_x_y[0] - (2.5 / 2.0),
-        input_x_y[1] - (2.5 / 2.0),
-        input_x_y[0] + (2.5 / 2.0),
-        input_x_y[1] + (2.5 / 2.0),
-    ]
-    coords = Polygon(
-        [
-            (rect[0], rect[1]),
-            (rect[2], rect[1]),
-            (rect[2], rect[3]),
-            (rect[0], rect[3]),
-            (rect[0], rect[1]),
-        ]
-    )
-
-    return coords
