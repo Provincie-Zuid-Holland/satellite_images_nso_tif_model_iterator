@@ -18,22 +18,19 @@ from src.tif_model_iterator.__nso_ds_output import dissolve_gpd_output
 warnings.filterwarnings("ignore", category=UserWarning)
 
 """
-    This code is used to extract image processing kernels from nso satellite images .tif images and execute a model on each of those kernels with multi processing for loop.
+    This code is used to inference a model on every pixel in a .tif file.
 
-    For more information what kernels are: https://en.wikipedia.org/wiki/Kernel_(image_processing)
+    TODO: Kernels are not supported anymore currently only models with pixels are used.
 
-    Author: Michael de Winter, Jeroen Esseveld
+    Author: Michael de Winter, Pieter-Kouyzer
 """
 
 
 class TifKernelIteratorGenerator:
     """
-    This class set up a .tif image in order to easily extracts kernel from it.
-    With various parameters to control the size of the kernel.
 
-    Fading, which means giving less weight to pixels other than the centre kernel, is also implemented here.
-
-    Plus a multiprocessing for loop which iterates of each of these kernels extracted from the .tif file.
+    This class set up a .tif image in order to easily inference a model on every pixel.
+    We call it here a iterator.
 
     """
 
@@ -58,12 +55,12 @@ class TifKernelIteratorGenerator:
     ):
         """
 
-        Init of the nso tif kernel.
+        Init of the tif Kernel
 
         @param path_to_file: A path to a .tif file.
-        @param model: A prediction model with has to have a predict function and uses kernels as input.
+        @param model: A prediction model with has to have a predict function and uses pixels as input.
         @param output_file_name_generator: Generates desired filenames for output files
-        @param parts: Into how many parts to break the .tif file, this has to be done since most extracted pixels or kernel don't fit in memory.
+        @param parts: Into how many parts to break the .tif file, this has to be done since most extracted pixels or kernel don't fit in memory thus we divide the pixels into smaller chunks.
         @param normalize_scaler: Whether to use a normalize/scaler on all the kernels or not, the input here so be a normalize/scaler function. You have to submit the normalizer/scaler as a argument here if you want to use a scaler, this has to be a custom  class like nso_ds_normalize_scaler.
         @param column_names: names of the bands in the tif file.
         """
@@ -121,6 +118,7 @@ class TifKernelIteratorGenerator:
         left_boundary = x_step * x_step_size
         right_boundary = (x_step + 1) * x_step_size
 
+        # lower and the top pixels will always be the same.
         subset_data = self.data[:, left_boundary:right_boundary, bottom:top]
 
         subset_df = self._create_pixel_coordinate_dataframe(
@@ -174,6 +172,7 @@ class TifKernelIteratorGenerator:
             [y for y in range(0, data.shape[2])] for x in range(0, data.shape[1])
         ]
 
+        # We have to have a square so we are getting the upper left, upper right, lower left and lower right pixels.
         rd_x_ul, rd_y_ul = rasterio.transform.xy(
             self.dataset.transform, x_coordinates, y_coordinates, offset="ul"
         )
