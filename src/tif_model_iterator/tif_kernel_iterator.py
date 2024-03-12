@@ -172,7 +172,7 @@ class TifKernelIteratorGenerator:
             [y for y in range(0, data.shape[2])] for x in range(0, data.shape[1])
         ]
 
-        # We have to have a square so we are getting the upper left, upper right, lower left and lower right pixels.
+        # We have to have a square so we are getting the upper left, upper right, lower left and lower right coordinates of the corners of a pixel
         rd_x_ul, rd_y_ul = rasterio.transform.xy(
             self.dataset.transform, x_coordinates, y_coordinates, offset="ul"
         )
