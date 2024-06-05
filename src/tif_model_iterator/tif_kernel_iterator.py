@@ -72,6 +72,8 @@ class TifKernelIteratorGenerator:
         self.dataset = rasterio.open(path_to_tif_file)
         meta = self.dataset.meta.copy()
         self.data = self.dataset.read()
+        print("Size of input data: " + str(self.data.shape))
+        print("Total rows: " + str(self.data.shape[1] * self.data.shape[2]))
         self.width, self.height = meta["width"], meta["height"]
         self.bands = [band + 1 for band in range(0, self.data.shape[0])]
 
@@ -126,6 +128,14 @@ class TifKernelIteratorGenerator:
         )
 
         subset_df = self._filter_out_empty_pixels(subset_df)
+
+        print("This part has " + str(len(subset_df)) + " rows")
+        print(subset_df.memory_usage(deep=True))
+        print("Total memory usage in bytes:", subset_df.memory_usage(deep=True).sum())
+        print(
+            "Total memory usage in megabytes:",
+            subset_df.memory_usage(deep=True).sum() / (1024**2),
+        )
 
         if len(subset_df) == 0:
             print("This part is empty, so we skip the next steps.")
@@ -268,18 +278,38 @@ class TifKernelIteratorGenerator:
         print("Creating geometry")
         start = timer()
         # Make squares from the the pixels in order to make connected polygons from them.
-        df["geometry"] = df.apply(
-            lambda x: Polygon(
-                [
-                    (x["rd_x_ul"], x["rd_y_ul"]),
-                    (x["rd_x_ur"], x["rd_y_ur"]),
-                    (x["rd_x_lr"], x["rd_y_lr"]),
-                    (x["rd_x_ll"], x["rd_y_ll"]),
-                    (x["rd_x_ul"], x["rd_y_ul"]),
-                ]
-            ),
-            axis=1,
-        )
+        #df["geometry"] = df.apply(
+        #    lambda x: Polygon(
+        #        [
+        #            (x["rd_x_ul"], x["rd_y_ul"]),
+        #            (x["rd_x_ur"], x["rd_y_ur"]),
+        #            (x["rd_x_lr"], x["rd_y_lr"]),
+        #            (x["rd_x_ll"], x["rd_y_ll"]),
+        #            (x["rd_x_ul"], x["rd_y_ul"]),
+        #        ]
+        #    ),
+        #    axis=1,
+        #)
+
+        # Extract necessary columns
+        rd_x_ul = df['rd_x_ul'].to_numpy()
+        rd_y_ul = df['rd_y_ul'].to_numpy()
+        rd_x_ur = df['rd_x_ur'].to_numpy()
+        rd_y_ur = df['rd_y_ur'].to_numpy()
+        rd_x_lr = df['rd_x_lr'].to_numpy()
+        rd_y_lr = df['rd_y_lr'].to_numpy()
+        rd_x_ll = df['rd_x_ll'].to_numpy()
+        rd_y_ll = df['rd_y_ll'].to_numpy()
+
+        # Create polygons using list comprehension
+        df['geometry'] = [
+            Polygon([
+                (x_ul, y_ul), (x_ur, y_ur), (x_lr, y_lr), (x_ll, y_ll), (x_ul, y_ul)
+            ])
+            for x_ul, y_ul, x_ur, y_ur, x_lr, y_lr, x_ll, y_ll in zip(
+                rd_x_ul, rd_y_ul, rd_x_ur, rd_y_ur, rd_x_lr, rd_y_lr, rd_x_ll, rd_y_ll
+            )
+        ]
 
         df = df[["geometry", "label"]]
 
