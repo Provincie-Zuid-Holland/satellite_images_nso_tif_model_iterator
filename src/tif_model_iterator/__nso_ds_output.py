@@ -1,5 +1,5 @@
 import json
-
+from timeit import default_timer as timer
 import geopandas as gpd
 import pandas as pd
 
@@ -7,7 +7,7 @@ import pandas as pd
 
 This class handles various methods to write the results to a geojson.
 
-@author: Michael de Winter, Jeroen Esseveld
+@author: Michael de Winter, Pieter-Kouyzer
 
 """
 
@@ -73,6 +73,8 @@ def dissolve_label_geojson(path_in, path_out):
 def dissolve_gpd_output(agpd, path_out):
     dissolved = gpd.GeoDataFrame(columns=["label", "geometry"], crs=agpd.crs)
     labels = agpd["label"].unique()
+
+    start = timer()
     # print("------")
     for label in labels:
         union_gpd = agpd[agpd["label"] == label].unary_union
@@ -82,9 +84,12 @@ def dissolve_gpd_output(agpd, path_out):
             )
         )
     # print("------")
+    print("Dissolving finished in: " + str(timer() - start) + " second(s)")
 
+    start = timer()
     if ".geojson" not in path_out:
         dissolved.to_file(path_out)
 
     elif ".geojson" in path_out:
         dissolved.to_file(path_out, driver="GeoJSON")
+    print("Writing finished in: " + str(timer() - start) + " second(s)")

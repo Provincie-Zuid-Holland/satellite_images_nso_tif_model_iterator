@@ -5,9 +5,9 @@ import geopandas as gpd
 from shapely.geometry import Polygon
 
 
-def output_h3_hexagons(final_output_path, resolution=12):
+def output_h3_hexagons_from_pixels(final_output_path, resolution=12):
     """
-    Makes single geo points output into hexagon output.
+    Makes single geo points output with label output into a hexagon output.
 
 
     @param final_output_path: path to a row pixelbased point data.
