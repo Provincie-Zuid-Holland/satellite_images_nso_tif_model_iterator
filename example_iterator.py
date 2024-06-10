@@ -3,6 +3,9 @@ import pickle
 import settings
 from src.filenames.file_name_generator import OutputFileNameGenerator
 from src.tif_model_iterator import tif_kernel_iterator
+from h3_hexagons.nso_tif_model_iterater_hexagon_output import (
+    output_h3_hexagons_from_pixels,
+)
 import glob
 
 if __name__ == "__main__":
@@ -37,8 +40,8 @@ if __name__ == "__main__":
                     parts=number_of_parts,
                     normalize_scaler=loaded_model["scaler"],
                     column_names=settings.COLUMN_NAMES,
-                    dissolve_parts=False,
-                    square_output=False,
+                    dissolve_parts=settings.DISSOLVE_PARTS,
+                    square_output=settings.SQUARE_OUTPUT,
                 )
             )
 
@@ -47,6 +50,13 @@ if __name__ == "__main__":
                 "File stored here: "
                 + str(nso_tif_kernel_iterator_generator.return_final_output_path())
             )
+
+            if settings.HEXAGON_OUTPUT:
+
+                output_h3_hexagons_from_pixels(
+                    nso_tif_kernel_iterator_generator.return_final_output_path(),
+                    settings.HEXAGON_RESOLUTION,
+                )
 
         except Exception as e:
             print(e)
