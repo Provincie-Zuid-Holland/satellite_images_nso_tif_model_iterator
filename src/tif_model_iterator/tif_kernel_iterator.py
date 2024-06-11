@@ -74,6 +74,7 @@ class TifKernelIteratorGenerator:
         @param square_output: This parameter controls if the output will be outputted as a square which matches the pixels coordinates or just the centre of the square, will just output a normal pandas dataframe if true.
         @param output_crs: In which crs the output should be written.
         @param input_crs: In which crs the .tif file is, we assume 28992 here, dutch new RD.
+        @param skip_done_part: Parameter which controls if part should be redone or skipped if they have already been found in the output folder.
         """
         self.model = model
         self.output_file_name_generator = output_file_name_generator
@@ -121,7 +122,7 @@ class TifKernelIteratorGenerator:
 
     def __check_if_part_exists(self, afilepath):
         """
-        If a rain has failed some part do not have to be redone, this functions check if they exist
+        If a complete run has failed some part do not have to be redone, this functions check if they exist
 
         @param afilepath: Where a part file should be if it existed.
         """
@@ -202,7 +203,6 @@ class TifKernelIteratorGenerator:
 
         @param data: numpy array such with 3 shapes, first are the bands, then x, then y coordinates
         @param left_boundary: the x_coordinate coresponding to the left boundary of data
-
         @return Pandas DataFrame with columns: bands + [rd_x, rd_y]
         """
         print("Creating Pixel Coordinates")
