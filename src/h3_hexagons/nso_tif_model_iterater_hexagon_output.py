@@ -71,3 +71,5 @@ def output_h3_hexagons_from_pixels(final_output_path, resolution=12):
         + ".geojson",
         driver="GeoJSON",
     )
+
+    print("Hexagon indexing finished in: " + str(timer() - start) + " second(s)")
