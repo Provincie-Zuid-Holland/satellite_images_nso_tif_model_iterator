@@ -4,7 +4,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setup(
-    name="tif_model_iterator",  # Replace with your own username
+    name="satellite_images_nso_tif_model_iterator",  # Replace with your own username
     version="1.0.0",
     author="Michael de Winter",
     author_email="m.r.dewinter88@live.nl",
