@@ -1,7 +1,12 @@
 import pickle
 import settings
 from filenames.file_name_generator import OutputFileNameGenerator
-from tif_model_iterator import tif_kernel_iterator
+from satellite_images_nso_tif_model_iterator.tif_model_iterator import (
+    tif_model_iterator,
+)
+from satellite_images_nso_tif_model_iterator.filenames.file_name_generator import (
+    OutputFileNameGenerator,
+)
 from h3_hexagons.nso_tif_model_iterater_hexagon_output import (
     output_h3_hexagons_from_pixels,
 )
@@ -33,7 +38,7 @@ if __name__ == "__main__":
             )
 
             nso_tif_kernel_iterator_generator = (
-                tif_kernel_iterator.TifKernelIteratorGenerator(
+                tif_model_iterator.TifModelIteratorGenerator(
                     path_to_tif_file=tif_file,
                     model=loaded_model["model"],
                     output_file_name_generator=output_file_name_generator,

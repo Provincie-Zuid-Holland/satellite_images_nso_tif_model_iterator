@@ -3,7 +3,6 @@ import math
 import os
 import warnings
 from timeit import default_timer as timer
-
 import geopandas as gpd
 import numpy as np
 import pandas as pd
@@ -11,10 +10,10 @@ import rasterio
 from shapely.geometry import Polygon
 from sklearn.base import ClassifierMixin
 from tqdm import tqdm
-
-# TODO: These packages names could be better
 from filenames.file_name_generator import OutputFileNameGenerator
-from tif_model_iterator.__nso_ds_output import dissolve_gpd_output
+from satellite_images_nso_tif_model_iterator.tif_model_iterator.__nso_ds_output import (
+    dissolve_gpd_output,
+)
 
 
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -28,7 +27,7 @@ warnings.filterwarnings("ignore", category=UserWarning)
 """
 
 
-class TifKernelIteratorGenerator:
+class TifModelIteratorGenerator:
     """
 
     This class set up a .tif image in order to easily inference a model on every pixel.
