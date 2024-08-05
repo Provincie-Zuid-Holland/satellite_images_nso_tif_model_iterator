@@ -145,8 +145,11 @@ class TifModelIteratorGenerator:
         print("-------------")
         print("Part: " + str(x_step + 1) + " of " + str(self.parts))
 
-        if not self.__check_if_part_exists(
-            self.output_file_name_generator.generate_part_output_path(x_step)
+        if (
+            not self.__check_if_part_exists(
+                self.output_file_name_generator.generate_part_output_path(x_step)
+            )
+            and self.skip_done_part is True
         ):
             left_boundary = x_step * x_step_size
             right_boundary = (x_step + 1) * x_step_size
@@ -192,7 +195,7 @@ class TifModelIteratorGenerator:
                 step=x_step,
             )
         else:
-            print("Skipping this part, part seems to already exist!")
+            print("Skipping this part based on settings, part seems to already exist!")
 
     def _create_pixel_coordinate_dataframe(
         self, data: np.array, left_boundary: int
