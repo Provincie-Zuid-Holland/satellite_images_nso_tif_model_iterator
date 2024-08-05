@@ -18,7 +18,7 @@ if __name__ == "__main__":
     tif_file_regex = settings.TIF_FILE_INPUT_REGEX
     output_path = settings.OUTPUT_PATH
 
-    number_of_parts = 4
+    number_of_parts = settings.NUMBER_OF_PARTS
 
     loaded_model = pickle.load(open(filename, "rb"))
     print("Loaded model: " + filename.split("/")[-1])
