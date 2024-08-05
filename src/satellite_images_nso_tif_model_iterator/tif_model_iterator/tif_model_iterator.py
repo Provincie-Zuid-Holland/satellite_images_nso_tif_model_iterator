@@ -397,21 +397,15 @@ class TifModelIteratorGenerator:
         @param step: the step currently being written to file
         """
 
+        output_file_name = self.output_file_name_generator.generate_part_output_path(
+            step
+        )
+
         if self.dissolve_parts:
             print("Dissolving and writing part to file")
-
-            output_file_name = (
-                self.output_file_name_generator.generate_part_output_path(step)
-            )
-
             dissolve_gpd_output(gdf, output_file_name)
         else:
             print("Writing part to file")
-
-            output_file_name = (
-                self.output_file_name_generator.generate_part_output_path(step)
-            )
-
             if ".geojson" in output_file_name:
                 gdf.to_file(output_file_name)
             elif ".csv" in output_file_name:
@@ -480,7 +474,7 @@ class TifModelIteratorGenerator:
         ):
             os.remove(os.path.join(self.output_file_name_generator.output_path, file))
 
-    def return_final_output_path(self):
+    def get_final_output_path(self):
         """
         Getter for final output path.
         """

@@ -7,7 +7,7 @@ import pandas as pd
 
 This class handles various methods to write the results to a geojson.
 
-@author: Michael de Winter, Pieter-Kouyzer
+@author: Michael de Winter, Pieter-Kouyzer, Jeroen Esseveld
 
 """
 
