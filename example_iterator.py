@@ -23,7 +23,9 @@ if __name__ == "__main__":
     loaded_model = pickle.load(open(filename, "rb"))
     print("Loaded model: " + filename.split("/")[-1])
 
-    tif_files = [file for file in glob.glob(tif_file_regex)]
+    tif_files = [
+        "E:/data/nieuwkoopse_plassen/2023-06-04-00_00_2023-06-04-23_59_Sentinel-2_L2A_True_color_crop.tiff"
+    ]
 
     for tif_file in tif_files:
         tif_file = tif_file.replace("\\", "/")
@@ -34,7 +36,7 @@ if __name__ == "__main__":
             output_file_name_generator = OutputFileNameGenerator(
                 output_path=output_path,
                 output_file_name=output_path
-                + tif_file.split("/")[-1].replace(".tif", settings.OUTPUT_EXTENTSION),
+                + tif_file.split("/")[-1].replace(".tiff", settings.OUTPUT_EXTENTSION),
             )
 
             nso_tif_kernel_iterator_generator = (
@@ -65,6 +67,7 @@ if __name__ == "__main__":
                 output_h3_hexagons_from_pixels(
                     nso_tif_kernel_iterator_generator.return_final_output_path(),
                     settings.HEXAGON_RESOLUTION,
+                    crs="wgs84",
                 )
 
         except Exception as e:
