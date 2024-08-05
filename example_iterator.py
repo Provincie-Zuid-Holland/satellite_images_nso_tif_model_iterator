@@ -23,9 +23,7 @@ if __name__ == "__main__":
     loaded_model = pickle.load(open(filename, "rb"))
     print("Loaded model: " + filename.split("/")[-1])
 
-    tif_files = [
-        "E:/data/nieuwkoopse_plassen/2023-06-04-00_00_2023-06-04-23_59_Sentinel-2_L2A_True_color_crop.tiff"
-    ]
+    tif_files = ["paths/to/tif_files/*.tif"]
 
     for tif_file in tif_files:
         tif_file = tif_file.replace("\\", "/")
