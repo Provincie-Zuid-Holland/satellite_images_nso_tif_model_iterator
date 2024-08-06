@@ -1,13 +1,12 @@
 import pickle
 import settings
-from filenames.file_name_generator import OutputFileNameGenerator
 from satellite_images_nso_tif_model_iterator.tif_model_iterator import (
     tif_model_iterator,
 )
 from satellite_images_nso_tif_model_iterator.filenames.file_name_generator import (
     OutputFileNameGenerator,
 )
-from h3_hexagons.nso_tif_model_iterater_hexagon_output import (
+from satellite_images_nso_tif_model_iterator.h3_hexagons.nso_tif_model_iterater_hexagon_output import (
     output_h3_hexagons_from_pixels,
 )
 import glob
