@@ -14,6 +14,8 @@ from satellite_images_nso_tif_model_iterator.h3_hexagons.nso_tif_model_iterater_
 )
 from pathlib import Path
 import pandas as pd
+import geopandas as gpd
+
 
 # import settings_test
 
@@ -31,6 +33,31 @@ test_tif_files_dir_pneo = "E:/output/test/Nieuwkoopse_plassen/input_data/*PNEO*.
 a_tif_file_hexagon_test = "E:/output/test/Nieuwkoopse_plassen/input_data/20230905_105231_PNEO-03_1_1_30cm_RD_12bit_RGBNED_Uithoorn_Nieuwkoopse_Plassen_De_Haeck_cropped_ndwi_re_ndvi_Ground_test.tif"
 
 output_path_test = "E:/output/test/Nieuwkoopse_plassen/output/"
+
+# Functions
+
+
+def is_valid_geodataframe_with_polygons(df):
+    """
+    Check if the given DataFrame is a GeoDataFrame containing only Polygon or MultiPolygon geometries.
+
+    Parameters:
+    df (pd.DataFrame): The DataFrame to check.
+
+    Returns:
+    bool: True if the DataFrame is a GeoDataFrame with only Polygon or MultiPolygon geometries, False otherwise.
+    """
+    if isinstance(df, gpd.GeoDataFrame):
+        if "geometry" in df.columns:
+            # Check if the 'geometry' column contains only Polygon or MultiPolygon
+            geom_types = df["geometry"].geom_type.unique()
+            return all(
+                geom_type in {"Polygon", "MultiPolygon"} for geom_type in geom_types
+            )
+    return False
+
+
+# Tests
 
 
 def test_predict_all_function_superview_files():
@@ -82,7 +109,7 @@ def test_predict_all_function_superview_files():
             ):
                 print("Wrong!!!!!!!")
                 falses = falses + 1
-                os.remove(afile)
+            os.remove(afile)
 
         print("False rating off: " + str(falses / len(glob.glob(output_path_test))))
 
@@ -135,12 +162,12 @@ def test_predict_all_function_pneo_files():
 
                     falses = falses + 1
 
-            print(
-                "False rating off: "
-                + str(falses / len(glob.glob(output_path_test + "*PNEO*.parquet")))
-            )
+                print(
+                    "False rating off: "
+                    + str(falses / len(glob.glob(output_path_test + "*PNEO*.parquet")))
+                )
 
-            # os.remove(afile)
+                os.remove(afile)
 
     assert falses == 0
 
@@ -180,7 +207,7 @@ def test_hexagon():
         13,
     )
 
-    file_exists = Path(path_hexagons).exists()
+    file_exists = is_valid_geodataframe_with_polygons(gpd.read_file(path_hexagons))
     os.remove(path_hexagons)
-
+    os.remove(nso_tif_kernel_iterator_generator.get_final_output_path())
     assert file_exists

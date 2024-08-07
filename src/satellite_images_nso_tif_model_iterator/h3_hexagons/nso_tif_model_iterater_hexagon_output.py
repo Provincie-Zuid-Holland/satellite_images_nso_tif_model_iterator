@@ -52,6 +52,15 @@ def read_data(path_to_file, crs):
 
 
 def transform_data(df, resolution):
+    """
+    Maps every geopoint to a hexagon id.
+    And then groups by each geopoint on it's hexagon id and takes the value which is most frequent.
+
+
+    @param df: pandas dataframe with geopoints in it in WGS84
+    @param resolution: The resolution of the hexagon
+    return a dataframe of groupby geopoints based on their hexagon id's.
+    """
 
     start = timer()
     # match the point with a hexagon id
