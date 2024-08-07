@@ -3,7 +3,7 @@ import pyproj
 import pandas as pd
 import geopandas as gpd
 from shapely.geometry import Polygon
-import timer
+from timeit import default_timer as timer
 
 
 def read_data(path_to_file, crs):
@@ -80,14 +80,18 @@ def output_h3_hexagons_from_pixels(path_to_file, resolution=12, crs="28892"):
     Makes single geo points output with label output into a hexagon output.
 
     @param path_to_file: path to a file which contains row pixel based geopoint data.
-    @param resolution: the resolution of the hexagon, look at https://h3geo.org/docs/core-library/restable/ for details
+    @param resolution: the resolution of the hexagon, look at https://h3geo.org/docs/core-library/restable/ for details.
+    @return path to where the file is stored.
     """
 
     df = read_data(path_to_file, crs)
     df = transform_data(df, resolution)
 
-    # Export results to a .geojson
-    gpd.GeoDataFrame(df, geometry=df["geometry"]).to_file(
-        path_to_file.split(".")[0] + "_hexagons_res" + str(resolution) + ".geojson",
-        driver="GeoJSON",
+    output_name = (
+        path_to_file.split(".")[0] + "_hexagons_res" + str(resolution) + ".geojson"
     )
+
+    # Export results to a .geojson
+    gpd.GeoDataFrame(df, geometry=df["geometry"]).to_file(output_name, driver="GeoJSON")
+
+    return output_name
