@@ -29,5 +29,6 @@ setup(
         "rasterio>=1.1.3",
         "Shapely>=1.7.0",
         "h3 == 3.7.7",
+        "scikit-learn == 1.5.1"
     ],
 )
