@@ -69,7 +69,7 @@ def test_predict_all_function_superview_files():
             column_names=selected_features,
             dissolve_parts=False,
             square_output=False,
-            skip_done_part=False,
+            do_all_parts=True,
         )
 
         nso_tif_model_iterator_generator.predict_all_output()
@@ -124,7 +124,7 @@ def test_predict_all_function_pneo_files():
                     column_names=selected_features,
                     dissolve_parts=False,
                     square_output=False,
-                    skip_done_part=False,
+                    do_all_parts=True,
                 )
             )
 

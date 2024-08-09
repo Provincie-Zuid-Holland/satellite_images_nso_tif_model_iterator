@@ -59,6 +59,7 @@ if __name__ == "__main__":
                 parts=4,
                 normalize_scaler=loaded_model["scaler"],
                 column_names=["r", "g", "b", "n", "e", "d", "ndvi", "re_ndvi"],
+                do_all_parts = True
             )
     )
 

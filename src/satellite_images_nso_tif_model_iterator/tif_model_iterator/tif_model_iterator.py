@@ -10,7 +10,9 @@ import rasterio
 from shapely.geometry import Polygon
 from sklearn.base import ClassifierMixin
 from tqdm import tqdm
-from filenames.file_name_generator import OutputFileNameGenerator
+from satellite_images_nso_tif_model_iterator.filenames.file_name_generator import (
+    OutputFileNameGenerator,
+)
 from satellite_images_nso_tif_model_iterator.tif_model_iterator.__nso_ds_output import (
     dissolve_gpd_output,
 )
@@ -57,7 +59,7 @@ class TifModelIteratorGenerator:
         square_output=True,
         output_crs=False,
         input_crs=28992,
-        skip_done_part=True,
+        do_all_parts=True,
     ):
         """
 
@@ -73,7 +75,7 @@ class TifModelIteratorGenerator:
         @param square_output: This parameter controls if the output will be outputted as a square which matches the pixels coordinates or just the centre of the square, will just output a normal pandas dataframe if true.
         @param output_crs: In which crs the output should be written.
         @param input_crs: In which crs the .tif file is, we assume 28992 here, dutch new RD.
-        @param skip_done_part: Parameter which controls if part should be redone or skipped if they have already been found in the output folder.
+        @param do_all_parts: Parameter which controls if part should be redone or skipped if they have already been found in the output folder.
         """
         self.model = model
         self.output_file_name_generator = output_file_name_generator
@@ -91,7 +93,7 @@ class TifModelIteratorGenerator:
         self.square_output = square_output
         self.input_crs = input_crs
         self.output_crs = output_crs
-        self.skip_done_part = skip_done_part
+        self.do_all_parts = do_all_parts
         self.final_output_path = (
             self.output_file_name_generator.generate_final_output_path()
         )
@@ -149,7 +151,7 @@ class TifModelIteratorGenerator:
             not self.__check_if_part_exists(
                 self.output_file_name_generator.generate_part_output_path(x_step)
             )
-            and self.skip_done_part is not True
+            or self.do_all_parts is True
         ):
             left_boundary = x_step * x_step_size
             right_boundary = (x_step + 1) * x_step_size
