@@ -14,6 +14,7 @@ from satellite_images_nso_tif_model_iterator.h3_hexagons.nso_tif_model_iterater_
 )
 import pandas as pd
 import geopandas as gpd
+import geopandas.testing
 import tests.test_settings as test_settings
 
 
@@ -151,10 +152,13 @@ def test_predict_all_function_pneo_files():
 def test_hexagon():
 
     path_hexagons = output_h3_hexagons_from_pixels(
-        os.path.abspath(test_settings.hexagon_test_file),
-        13,
+        os.path.abspath(test_settings.hexagon_test_file), 
+        output_file_path=test_settings.a_hexagon_test_output_file,
+        resolution=13,
     )
 
-    file_exists = is_valid_geodataframe_with_polygons(gpd.read_file(path_hexagons))
-    os.remove(path_hexagons)
-    assert file_exists
+    check_gpd_assert = geopandas.testing.assert_geodataframe_equal(gpd.read_file(path_hexagons), gpd.read_file(test_settings.a_hexagon_compare_test_file))
+    #os.remove(path_hexagons)
+
+    
+    assert  check_gpd_assert== None
