@@ -31,8 +31,8 @@ Copy `settings_example.py` and rename to `settings.py`. Change the variables in 
 ```python
 
 import settings
-from src.filenames.file_name_generator import OutputFileNameGenerator
-from src.tif_model_iterator import tif_kernel_iterator
+from satellite_images_nso_tif_model_iterator.filenames.file_name_generator import OutputFileNameGenerator
+from satellite_images_nso_tif_model_iterator.tif_model_iterator import TifModelIteratorGenerator
 
 
 if __name__ == "__main__":
@@ -52,13 +52,14 @@ if __name__ == "__main__":
 
     # Initialize the iterator
     nso_tif_kernel_iterator_generator = (
-            tif_kernel_iterator.TifKernelIteratorGenerator(
+            tif_kernel_iterator.TifModelIteratorGenerator(
                 path_to_tif_file=tif_file,
                 model=loaded_model["model"],
                 output_file_name_generator=output_file_name_generator,
                 parts=4,
                 normalize_scaler=loaded_model["scaler"],
                 column_names=["r", "g", "b", "n", "e", "d", "ndvi", "re_ndvi"],
+                do_all_parts = True
             )
     )
 

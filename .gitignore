@@ -1,3 +1,7 @@
 settings.py
 *__pycache__*
 .idea/
+iterator_implementation.py
+postprocessing/cleanup
+build
+src/satellite_images_nso_tif_model_iterator.egg-info
