@@ -18,29 +18,12 @@ import geopandas.testing
 import tests.test_settings as test_settings
 
 
-# Functions
-def is_valid_geodataframe_with_polygons(df):
-    """
-    Check if the given DataFrame is a GeoDataFrame containing only Polygon or MultiPolygon geometries.
-
-    Parameters:
-    df (pd.DataFrame): The DataFrame to check.
-
-    Returns:
-    bool: True if the DataFrame is a GeoDataFrame with only Polygon or MultiPolygon geometries, False otherwise.
-    """
-    if isinstance(df, gpd.GeoDataFrame):
-        if "geometry" in df.columns:
-            # Check if the 'geometry' column contains only Polygon or MultiPolygon
-            geom_types = df["geometry"].geom_type.unique()
-            return all(
-                geom_type in {"Polygon", "MultiPolygon"} for geom_type in geom_types
-            )
-    return False
-
-
 # Begin Tests
 def test_predict_all_function_superview_files():
+    """
+    Test if the iterator works on small .tif files from the superview constellation.
+
+    """
 
     final_artefact = pickle.load(
         open(os.path.abspath(test_settings.model_path_sv).replace("\\", "/"), "rb")
@@ -96,6 +79,11 @@ def test_predict_all_function_superview_files():
 
 
 def test_predict_all_function_pneo_files():
+    """
+
+    Test if the iterator works on small .tif files from the pneo constellation
+
+    """
 
     final_artefact = pickle.load(
         open(os.path.abspath(test_settings.model_path_pneo), "rb")
@@ -150,15 +138,22 @@ def test_predict_all_function_pneo_files():
 
 
 def test_hexagon():
+    """
+
+    Test if the hexagon output is working.
+
+    """
 
     path_hexagons = output_h3_hexagons_from_pixels(
-        os.path.abspath(test_settings.hexagon_test_file), 
+        os.path.abspath(test_settings.hexagon_test_file),
         output_file_path=test_settings.a_hexagon_test_output_file,
         resolution=13,
     )
 
-    check_gpd_assert = geopandas.testing.assert_geodataframe_equal(gpd.read_file(path_hexagons), gpd.read_file(test_settings.a_hexagon_compare_test_file))
-    #os.remove(path_hexagons)
+    check_gpd_assert = geopandas.testing.assert_geodataframe_equal(
+        gpd.read_file(path_hexagons),
+        gpd.read_file(test_settings.a_hexagon_compare_test_file),
+    )
+    os.remove(path_hexagons)
 
-    
-    assert  check_gpd_assert== None
+    assert check_gpd_assert == None
