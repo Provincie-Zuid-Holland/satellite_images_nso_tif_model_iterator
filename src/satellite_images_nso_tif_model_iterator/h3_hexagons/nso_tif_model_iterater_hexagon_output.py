@@ -1,9 +1,10 @@
-import h3
-import pyproj
-import pandas as pd
-import geopandas as gpd
-from shapely.geometry import Polygon
 from timeit import default_timer as timer
+
+import geopandas as gpd
+import h3
+import pandas as pd
+import pyproj
+from shapely.geometry import Polygon
 
 
 def read_data(path_to_file, crs):
@@ -84,7 +85,9 @@ def transform_data(df, resolution):
     return df
 
 
-def output_h3_hexagons_from_pixels(path_to_file,output_file_path= False, resolution=12, crs="28892"):
+def output_h3_hexagons_from_pixels(
+    path_to_file, resolution=12, output_file_path=False, crs="28892"
+):
     """
     Makes single geo points output with label output into a hexagon output.
 
@@ -96,13 +99,21 @@ def output_h3_hexagons_from_pixels(path_to_file,output_file_path= False, resolut
     df = read_data(path_to_file, crs)
     df = transform_data(df, resolution)
 
-    output_name=""
+    output_name = ""
     # Export results to a .geojson
     if not output_file_path:
-        gpd.GeoDataFrame(df, geometry=df["geometry"]).to_file(path_to_file.split(".")[0] + "_hexagons_res" + str(resolution) + ".geojson", driver="GeoJSON")
-        output_name=path_to_file.split(".")[0] + "_hexagons_res" + str(resolution) + ".geojson"
+        gpd.GeoDataFrame(df, geometry=df["geometry"]).to_file(
+            path_to_file.split(".")[0] + "_hexagons_res" + str(resolution) + ".geojson",
+            driver="GeoJSON",
+        )
+        output_name = (
+            path_to_file.split(".")[0] + "_hexagons_res" + str(resolution) + ".geojson"
+        )
     else:
-        gpd.GeoDataFrame(df, geometry=df["geometry"]).to_file(output_file_path, driver="GeoJSON")
-        output_name=output_file_path
+        gpd.GeoDataFrame(df, geometry=df["geometry"]).to_file(
+            output_file_path, driver="GeoJSON"
+        )
+        output_name = output_file_path
 
+    return output_name
     return output_name

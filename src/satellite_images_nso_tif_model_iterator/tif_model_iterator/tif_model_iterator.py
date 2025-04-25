@@ -15,6 +15,9 @@ from tqdm import tqdm
 from satellite_images_nso_tif_model_iterator.filenames.file_name_generator import (
     OutputFileNameGenerator,
 )
+from satellite_images_nso_tif_model_iterator.h3_hexagons.nso_tif_model_iterater_hexagon_output import (
+    output_h3_hexagons_from_pixels,
+)
 from satellite_images_nso_tif_model_iterator.tif_model_iterator.__nso_ds_output import (
     dissolve_gpd_output,
 )
@@ -31,21 +34,39 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 
 def sanitize_settings(
-    hexagon_parts, dissolve_parts, square_output, output_file_name_generator
+    hexagon_output,
+    hexagon_resolution,
+    dissolve_parts,
+    square_output,
+    output_file_name_generator,
 ):
     """
 
     Certain input value's are not accepted, as such error's need to be raised if input is not correct.
 
     """
-    if hexagon_parts and (dissolve_parts or square_output):
+    if hexagon_output and (dissolve_parts or square_output):
         raise ValueError(
-            "'dissolve_parts' and 'square_output' cannot be true while 'hexagon_parts=True'"
+            "'dissolve_parts' and 'square_output' cannot be true while 'hexagon_output=True'"
         )
 
     output_path = output_file_name_generator.generate_final_output_path()
+
     if not output_path.endswith((".geojson", ".csv", ".parquet")):
-        raise ValueError(" .shp files as output are not supported")
+        raise ValueError("Only parquet, geojson and csv files are supported")
+
+    if ".parquet" in output_path and square_output is True:
+        raise ValueError(
+            " Square output has to be False in order to make .parquet files"
+        )
+
+    if ".csv" in output_path and square_output is True:
+        raise ValueError(" Square output has to be False in order to make .csv files")
+
+    if hexagon_output is True and hexagon_resolution is False:
+        raise ValueError(
+            "If hexagon output is enabled a hexagons resolution has to be given"
+        )
 
 
 class TifModelIteratorGenerator:
@@ -77,6 +98,7 @@ class TifModelIteratorGenerator:
         dissolve_parts=True,
         square_output=True,
         hexagon_output=False,
+        hexagon_resolution=False,
         output_crs=False,
         input_crs=28992,
         do_all_parts=True,
@@ -100,7 +122,11 @@ class TifModelIteratorGenerator:
         """
 
         sanitize_settings(
-            hexagon_output, dissolve_parts, square_output, output_file_name_generator
+            hexagon_output,
+            hexagon_resolution,
+            dissolve_parts,
+            square_output,
+            output_file_name_generator,
         )
         self.model = model
         self.output_file_name_generator = output_file_name_generator
@@ -122,6 +148,9 @@ class TifModelIteratorGenerator:
         self.final_output_path = (
             self.output_file_name_generator.generate_final_output_path()
         )
+
+        self.hexagon_output = hexagon_output
+        self.hexagon_resolution = hexagon_resolution
 
     def predict_all_output(
         self,
@@ -145,6 +174,14 @@ class TifModelIteratorGenerator:
 
         self._write_full_gdf_to_file()
         self._clean_up_part_files()
+
+        if self.hexagon_output:
+            self.__create_hexagons()
+
+    def __create_hexagons(self):
+        print("Making hexagons with resolution " + str(self.hexagon_resolution))
+
+        print("Wrote hexagons to: "+output_h3_hexagons_from_pixels(self.final_output_path, self.hexagon_resolution)
 
     def __check_if_part_exists(self, afilepath):
         """
