@@ -116,4 +116,3 @@ def output_h3_hexagons_from_pixels(
         output_name = output_file_path
 
     return output_name
-    return output_name
