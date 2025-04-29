@@ -3,6 +3,7 @@ import math
 import os
 import warnings
 from timeit import default_timer as timer
+
 import geopandas as gpd
 import numpy as np
 import pandas as pd
@@ -10,13 +11,16 @@ import rasterio
 from shapely.geometry import Polygon
 from sklearn.base import ClassifierMixin
 from tqdm import tqdm
+
 from satellite_images_nso_tif_model_iterator.filenames.file_name_generator import (
     OutputFileNameGenerator,
+)
+from satellite_images_nso_tif_model_iterator.h3_hexagons.nso_tif_model_iterater_hexagon_output import (
+    output_h3_hexagons_from_pixels,
 )
 from satellite_images_nso_tif_model_iterator.tif_model_iterator.__nso_ds_output import (
     dissolve_gpd_output,
 )
-
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -27,6 +31,42 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
     Author: Michael de Winter, Pieter-Kouyzer
 """
+
+
+def sanitize_settings(
+    hexagon_output,
+    hexagon_resolution,
+    dissolve_parts,
+    square_output,
+    output_file_name_generator,
+):
+    """
+
+    Certain input value's are not accepted, as such error's need to be raised if input is not correct.
+
+    """
+    if hexagon_output and (dissolve_parts or square_output):
+        raise ValueError(
+            "'dissolve_parts' and 'square_output' cannot be true while 'hexagon_output=True'"
+        )
+
+    output_path = output_file_name_generator.generate_final_output_path()
+
+    if not output_path.endswith((".geojson", ".csv", ".parquet")):
+        raise ValueError("Only parquet, geojson and csv files are supported")
+
+    if ".parquet" in output_path and square_output is True:
+        raise ValueError(
+            " Square output has to be False in order to make .parquet files"
+        )
+
+    if ".csv" in output_path and square_output is True:
+        raise ValueError(" Square output has to be False in order to make .csv files")
+
+    if hexagon_output is True and hexagon_resolution is False:
+        raise ValueError(
+            "If hexagon output is enabled a hexagons resolution has to be given"
+        )
 
 
 class TifModelIteratorGenerator:
@@ -57,6 +97,8 @@ class TifModelIteratorGenerator:
         ],
         dissolve_parts=True,
         square_output=True,
+        hexagon_output=False,
+        hexagon_resolution=False,
         output_crs=False,
         input_crs=28992,
         do_all_parts=True,
@@ -67,16 +109,25 @@ class TifModelIteratorGenerator:
 
         @param path_to_file: A path to a .tif file.
         @param model: A prediction model with has to have a predict function and uses pixels as input.
-        @param output_file_name_generator: Generates desired filenames for output files
+        @param output_file_name_generator: Generates desired filenames for output files, if you are using hexagon this has to be a .parquet file for polygon output use a .geojson or .shp file output.
         @param parts: Into how many parts to break the .tif file, this has to be done since most extracted pixels or kernel don't fit in memory thus we divide the pixels into smaller chunks.
         @param normalize_scaler: Whether to use a normalize/scaler on all the kernels or not, the input here so be a normalize/scaler function. You have to submit the normalizer/scaler as a argument here if you want to use a scaler, this has to be a custom  class like nso_ds_normalize_scaler.
         @param column_names: names of the bands in the tif file.
         @param dissolve_parts: This parameter controls if the output should be aggregated to polygons, warning with a large amount of pixels this seems to fail. Either reduce the number of parts or use databricks.
         @param square_output: This parameter controls if the output will be outputted as a square which matches the pixels coordinates or just the centre of the square, will just output a normal pandas dataframe if true.
+        @param hexagon_output: this variable control wether we have to output hexagons.
         @param output_crs: In which crs the output should be written.
         @param input_crs: In which crs the .tif file is, we assume 28992 here, dutch new RD.
         @param do_all_parts: Parameter which controls if part should be redone or skipped if they have already been found in the output folder.
         """
+
+        sanitize_settings(
+            hexagon_output,
+            hexagon_resolution,
+            dissolve_parts,
+            square_output,
+            output_file_name_generator,
+        )
         self.model = model
         self.output_file_name_generator = output_file_name_generator
         self.parts = parts
@@ -97,6 +148,9 @@ class TifModelIteratorGenerator:
         self.final_output_path = (
             self.output_file_name_generator.generate_final_output_path()
         )
+
+        self.hexagon_output = hexagon_output
+        self.hexagon_resolution = hexagon_resolution
 
     def predict_all_output(
         self,
@@ -120,6 +174,14 @@ class TifModelIteratorGenerator:
 
         self._write_full_gdf_to_file()
         self._clean_up_part_files()
+
+        if self.hexagon_output:
+            self.__create_hexagons()
+
+    def __create_hexagons(self):
+        print("Making hexagons with resolution " + str(self.hexagon_resolution))
+
+        print("Wrote hexagons to: "+output_h3_hexagons_from_pixels(self.final_output_path, self.hexagon_resolution)
 
     def __check_if_part_exists(self, afilepath):
         """
@@ -303,8 +365,10 @@ class TifModelIteratorGenerator:
 
         @return df: Filtered version of df
         """
-        # We want to have RGB values != 0 for any point we want to predict on RGB is in bands 1,2,3
-        non_empty_pixel_mask = (df[["r", "g", "b"]] != 0).any(axis="columns")
+        color_columns = [col for col in df.columns if col.lower() in ["r", "g", "b"]]
+
+        # Then check for non-zero values in those columns
+        non_empty_pixel_mask = (df[color_columns] != 0).any(axis="columns")
         return df[non_empty_pixel_mask]
 
     def _predict_labels(
