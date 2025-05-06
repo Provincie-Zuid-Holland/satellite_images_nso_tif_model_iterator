@@ -2,12 +2,15 @@ import glob
 import math
 import os
 import warnings
+from pathlib import Path
 from timeit import default_timer as timer
 
 import geopandas as gpd
 import numpy as np
 import pandas as pd
 import rasterio
+from rasterio.features import rasterize
+from rasterio.transform import from_origin
 from shapely.geometry import Polygon
 from sklearn.base import ClassifierMixin
 from tqdm import tqdm
@@ -52,13 +55,16 @@ def sanitize_settings(
 
     output_path = output_file_name_generator.generate_final_output_path()
 
-    if not output_path.endswith((".geojson", ".csv", ".parquet")):
-        raise ValueError("Only parquet, geojson and csv files are supported")
+    if not output_path.endswith((".geojson", ".csv", ".parquet", ".tif")):
+        raise ValueError("Only parquet, geojson, tif and csv files are supported")
 
     if ".parquet" in output_path and square_output is True:
         raise ValueError(
             " Square output has to be False in order to make .parquet files"
         )
+
+    if ".tif" in output_path and square_output is False:
+        raise ValueError(" Square output has to be True in order to make .tif files")
 
     if ".csv" in output_path and square_output is True:
         raise ValueError(" Square output has to be False in order to make .csv files")
@@ -181,7 +187,12 @@ class TifModelIteratorGenerator:
     def __create_hexagons(self):
         print("Making hexagons with resolution " + str(self.hexagon_resolution))
 
-        print("Wrote hexagons to: "+output_h3_hexagons_from_pixels(self.final_output_path, self.hexagon_resolution)
+        print(
+            "Wrote hexagons to: "
+            + output_h3_hexagons_from_pixels(
+                self.final_output_path, self.hexagon_resolution
+            )
+        )
 
     def __check_if_part_exists(self, afilepath):
         """
@@ -393,6 +404,50 @@ class TifModelIteratorGenerator:
         print(f"Predicting finished in: {str(timer() - start)} second(s)")
         return df
 
+    def create_raster_file_from_geojson(self, gdf, cast_to_crs="EPSG:28992"):
+        # TODO: this might not also be the native crs!
+        gdf = gdf.set_crs(cast_to_crs, allow_override=True)
+
+        gdf["label_id"] = gdf["label"].astype("category").cat.codes
+
+        # Rasterization settings
+        # TODO: how match this to more crs's?
+        pixel_size = 1.0  # 1 meter resolution, matches your CRS
+        bounds = gdf.total_bounds  # (minx, miny, maxx, maxy)
+        minx, miny, maxx, maxy = bounds
+
+        width = int((maxx - minx) / pixel_size)
+        height = int((maxy - miny) / pixel_size)
+
+        # Top-left origin
+        transform = from_origin(minx, maxy, pixel_size, pixel_size)
+
+        # Prepare shapes as (geometry, value) tuples
+        shapes = [(geom, value) for geom, value in zip(gdf.geometry, gdf["label_id"])]
+
+        # Rasterize
+        raster = rasterize(
+            shapes,
+            out_shape=(height, width),
+            transform=transform,
+            fill=0,
+            dtype="int32",
+        )
+
+        # Save raster
+        with rasterio.open(
+            self.final_output_path,
+            "w",
+            driver="GTiff",
+            height=height,
+            width=width,
+            count=1,
+            dtype=raster.dtype,
+            crs=gdf.crs,
+            transform=transform,
+        ) as dst:
+            dst.write(raster, 1)
+
     def transform_to_polygons(self, df: pd.DataFrame) -> gpd.GeoDataFrame:
         """
         Changes the rd_x, rd_y coordinates of df into square polygons, so df can be a GeoDataFrame with Polygons as geometry
@@ -478,6 +533,9 @@ class TifModelIteratorGenerator:
                 gdf.to_csv(output_file_name, index=False)
             elif ".parquet" in output_file_name:
                 gdf.to_parquet(output_file_name)
+            elif ".tif" in output_file_name:
+                # We first write to a .gjson before we rasterize everything.
+                gdf.to_file(output_file_name)
 
     def _write_full_gdf_to_file(self):
         """
@@ -499,6 +557,10 @@ class TifModelIteratorGenerator:
         elif ".geojson" in self.final_output_path:
             full_gdf = pd.concat([gpd.read_file(file) for file in all_part_files])
 
+        elif ".tif" in self.final_output_path:
+            # Read in geojsons since we use that as intermitted for raster files.
+            full_gdf = pd.concat([gpd.read_file(file) for file in all_part_files])
+
         try:
             if (
                 str(type(self.model))
@@ -515,11 +577,24 @@ class TifModelIteratorGenerator:
         if self.square_output:
             if ".geojson" in self.final_output_path:
                 print("Writing to geojson")
-                full_gdf.dissolve(by="label").to_file(
-                    self.final_output_path, driver="GeoJSON"
-                )
+                if self.dissolve_parts:
+                    full_gdf.dissolve(by="label").to_file(
+                        self.final_output_path, driver="GeoJSON"
+                    )
+                else:
+                    full_gdf.to_file(self.final_output_path, driver="GeoJSON")
+            elif ".tif" in self.final_output_path:
+                print("Writing to tif")
+                if self.dissolve_parts:
+                    full_gdf.dissolve(by="label")
+
+                self.create_raster_file_from_geojson(full_gdf)
+
             else:
-                full_gdf.dissolve(by="label").to_file(self.final_output_path)
+                if self.dissolve_parts:
+                    full_gdf.dissolve(by="label").to_file(self.final_output_path)
+                else:
+                    full_gdf.to_file(self.final_output_path)
         else:
             if ".csv" in self.final_output_path:
                 print("Writing to csv")
