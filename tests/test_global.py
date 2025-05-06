@@ -212,7 +212,7 @@ def test_raster_output():
                 output_path=os.path.abspath(test_settings.output_path_test) + "/",
                 output_file_name=os.path.abspath(test_settings.output_path_test)
                 + "/"
-                + a_tif_file.split("/")[-1].replace(".tif", ".tif"),
+                + a_tif_file.split("/")[-1],
             )
 
             nso_tif_kernel_iterator_generator = (
@@ -226,6 +226,7 @@ def test_raster_output():
                     dissolve_parts=False,
                     square_output=True,
                     do_all_parts=True,
+                    raster_resolution=2,
                 )
             )
 
@@ -245,27 +246,22 @@ def test_raster_output():
     assert falses == 0
 
 
-# TODO: Fix hexagon unit tests.
-# def test_hexagon():
-#    """
-#
-#    Test if the hexagon output is working.
-#
-#    """
-#
-#    path_hexagons = output_h3_hexagons_from_pixels(
-#        os.path.abspath(test_settings.hexagon_test_file),
-#        output_file_path=test_settings.a_hexagon_test_output_file,
-#        resolution=13,
-#    )
-#
-#    check_gpd_assert = geopandas.testing.assert_geodataframe_equal(
-#        gpd.read_file(path_hexagons),
-#        gpd.read_file(test_settings.a_hexagon_compare_test_file),
-#    )
-#    os.remove(path_hexagons)
-#
-#   assert check_gpd_assert == None
-#    os.remove(path_hexagons)
-#
-#    assert check_gpd_assert == None
+def test_hexagon():
+    """
+
+    Test if the hexagon output is working.
+    """
+
+    path_hexagons = output_h3_hexagons_from_pixels(
+        os.path.abspath(test_settings.hexagon_test_file),
+        output_file_path=test_settings.a_hexagon_test_output_file,
+        resolution=13,
+    )
+
+    check_gpd_assert = geopandas.testing.assert_geodataframe_equal(
+        gpd.read_file(path_hexagons),
+        gpd.read_file(test_settings.a_hexagon_compare_test_file),
+    )
+    os.remove(path_hexagons)
+
+    assert check_gpd_assert == None
