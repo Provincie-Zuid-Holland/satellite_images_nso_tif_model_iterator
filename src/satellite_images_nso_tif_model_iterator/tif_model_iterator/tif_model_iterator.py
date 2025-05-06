@@ -413,7 +413,6 @@ class TifModelIteratorGenerator:
         gdf["label_id"] = gdf["label"].astype("category").cat.codes
 
         # Rasterization settings
-        # TODO: Not a fixed resolution!
         pixel_size = self.raster_resolution  # 1 meter resolution, matches your CRS
         bounds = gdf.total_bounds  # (minx, miny, maxx, maxy)
         minx, miny, maxx, maxy = bounds

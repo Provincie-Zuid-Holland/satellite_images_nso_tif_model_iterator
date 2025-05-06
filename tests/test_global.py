@@ -245,6 +245,7 @@ def test_raster_output():
     assert falses == 0
 
 
+# TODO: Fix hexagon unit tests.
 # def test_hexagon():
 #    """
 #
