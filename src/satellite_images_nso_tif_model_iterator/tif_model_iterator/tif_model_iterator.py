@@ -108,6 +108,7 @@ class TifModelIteratorGenerator:
         output_crs=False,
         input_crs=28992,
         do_all_parts=True,
+        raster_resolution=0.25,
     ):
         """
 
@@ -157,6 +158,7 @@ class TifModelIteratorGenerator:
 
         self.hexagon_output = hexagon_output
         self.hexagon_resolution = hexagon_resolution
+        self.raster_resolution = raster_resolution
 
     def predict_all_output(
         self,
@@ -411,8 +413,8 @@ class TifModelIteratorGenerator:
         gdf["label_id"] = gdf["label"].astype("category").cat.codes
 
         # Rasterization settings
-        # TODO: how match this to more crs's?
-        pixel_size = 1.0  # 1 meter resolution, matches your CRS
+        # TODO: Not a fixed resolution!
+        pixel_size = self.raster_resolution  # 1 meter resolution, matches your CRS
         bounds = gdf.total_bounds  # (minx, miny, maxx, maxy)
         minx, miny, maxx, maxy = bounds
 
@@ -584,7 +586,7 @@ class TifModelIteratorGenerator:
                 else:
                     full_gdf.to_file(self.final_output_path, driver="GeoJSON")
             elif ".tif" in self.final_output_path:
-                print("Writing to tif")
+                print("Writing to a raster tif file")
                 if self.dissolve_parts:
                     full_gdf.dissolve(by="label")
 

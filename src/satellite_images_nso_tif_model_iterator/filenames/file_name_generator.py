@@ -14,7 +14,7 @@ class OutputFileNameGenerator:
         self.base_name = str(Path(output_file_name).with_suffix("")).replace("\\", "/")
 
     def generate_final_output_path(self) -> str:
-        file_name = f"{self.base_name}.{self.extension}"
+        file_name = f"{self.base_name}{self.extension}"
         return os.path.join(self.output_path, file_name)
 
     def generate_part_output_path(self, part_number: int) -> str:
